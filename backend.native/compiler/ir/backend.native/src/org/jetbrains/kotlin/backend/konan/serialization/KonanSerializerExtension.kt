@@ -25,6 +25,7 @@ internal class KonanSerializerExtension(val context: Context, override val metad
 ) :
         KotlinSerializerExtensionBase(KonanSerializerProtocol) {
 
+    val inlineDescriptorTable by lazy { DescriptorTable(context.irBuiltIns) }
     override val stringTable = KonanStringTable()
     override fun shouldUseTypeTable(): Boolean = true
 
@@ -93,5 +94,18 @@ internal class KonanSerializerExtension(val context: Context, override val metad
 
     override fun releaseCoroutines(): Boolean =
             context.config.configuration.languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines)
-
 }
+
+internal interface IrAwareExtension {
+
+    fun serializeInlineBody(descriptor: FunctionDescriptor, serializer: KonanDescriptorSerializer): String 
+
+    fun addFunctionIR(proto: ProtoBuf.Function.Builder, serializedIR: String): ProtoBuf.Function.Builder
+
+    fun addConstructorIR(proto: ProtoBuf.Constructor.Builder, serializedIR: String): ProtoBuf.Constructor.Builder
+
+    fun addSetterIR(proto: ProtoBuf.Property.Builder, serializedIR: String): ProtoBuf.Property.Builder
+
+    fun addGetterIR(proto: ProtoBuf.Property.Builder, serializedIR: String): ProtoBuf.Property.Builder
+}
+
