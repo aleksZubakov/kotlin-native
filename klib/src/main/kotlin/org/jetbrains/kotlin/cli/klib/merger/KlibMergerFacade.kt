@@ -39,12 +39,12 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
 
     }
 
-    fun merge(libs: List<KonanLibrary>): LinkData {
+    fun merge(libs: List<KonanLibrary>): ModuleDescriptorImpl {
         val modulesWithTargets = loadModulesWithTargets(libs)
         val mergedModules = DeclarationDescriptorMerger(LockBasedStorageManager(), DefaultBuiltIns.Instance).merge(modulesWithTargets)
-        mergedModules.setDependencies(mergedModules)
+//        mergedModules.setDependencies(mergedModules)
 
-        return serializeModule(mergedModules, konanConfig)
+        return /*serializeModule(mergedModules, konanConfig)*/ mergedModules
     }
 
     fun diff(libs: List<KonanLibrary>): List<ModuleWithTargets> {
@@ -62,16 +62,18 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
     fun mergeProperties(libs: List<KonanLibrary>): Properties = libs.map { it.manifestProperties }.first() // TODO
 }
 
-private fun loadStdlib(distribution: Distribution,
-                       versionSpec: LanguageVersionSettings,
-                       storageManager: StorageManager): ModuleDescriptorImpl {
+fun loadStdlib(distribution: Distribution,
+               versionSpec: LanguageVersionSettings,
+               storageManager: StorageManager): ModuleDescriptorImpl {
     val stdlib = Library(distribution.stdlib, null, "host")
     val library = libraryInRepoOrCurrentDir(stdlib.repository, stdlib.name)
-    return KonanFactories.DefaultDeserializedDescriptorFactory.createDescriptorAndNewBuiltIns(library, versionSpec, storageManager)
+    return KonanFactories.DefaultDeserializedDescriptorFactory.createDescriptor(library, versionSpec, storageManager, DefaultBuiltIns.Instance)
 }
 
 private val currentLanguageVersion = LanguageVersion.LATEST_STABLE
 private val currentApiVersion = ApiVersion.LATEST_STABLE
+
+var stdLibModule: ModuleDescriptorImpl? = null
 
 private fun loadDescriptors(repository: File, libraries: List<KonanLibrary>): List<ModuleDescriptorImpl> {
     // TODO pass [currentLanguageVersion] and [currentApiVersion] as parameters
@@ -79,10 +81,10 @@ private fun loadDescriptors(repository: File, libraries: List<KonanLibrary>): Li
     val storageManager = LockBasedStorageManager()
 
     // TODO find out is it required to load and set stdlib as dependency
-//    val stdLibModule = loadStdlib(Distribution(), versionSpec, storageManager)
-//    stdLibModule.setDependencies(stdLibModule)
+    stdLibModule = loadStdlib(Distribution(), versionSpec, storageManager)
+    stdLibModule?.setDependencies(stdLibModule!!)
 
-    val defaultBuiltins = DefaultBuiltIns.Instance
+    val defaultBuiltins = stdLibModule!!.builtIns/*DefaultBuiltIns.Instance*/
     val modules = mutableListOf<ModuleDescriptorImpl>()
     for (lib in libraries) {
         val konanLibrary = libraryInRepoOrCurrentDir(repository, lib.libraryName)
@@ -92,7 +94,7 @@ private fun loadDescriptors(repository: File, libraries: List<KonanLibrary>): Li
         // TODO is it ok to set curModule as itself dependency?
         /*modules + */listOf(curModule).let { allModules ->
             for (it in allModules) {
-                it.setDependencies(listOf(/*stdLibModule, */curModule))
+                it.setDependencies(listOf(stdLibModule!!, curModule))
             }
         }
         modules.add(curModule)
