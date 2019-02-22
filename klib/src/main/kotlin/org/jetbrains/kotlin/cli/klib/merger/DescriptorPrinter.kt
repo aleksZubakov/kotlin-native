@@ -3,6 +3,7 @@ package org.jetbrains.kotlin.cli.klib.merger
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.contracts.description.ContractProviderKey
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.js.descriptorUtils.hasPrimaryConstructor
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.renderer.*
@@ -45,10 +46,12 @@ fun printDescriptors(packageFqName: FqName, descriptors: List<DeclarationDescrip
                     withoutSuperTypes = true
                     includePropertyConstant = false
                     annotationFilter = { false }
+                    excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
                     secondaryConstructorsAsPrimary = false
                 })
 
 val interfaceDescriptorRenderer = DescriptorRenderer.withOptions {
+    excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
     classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
     withDefinedIn = false
     modifiers = DescriptorRendererModifier.ALL - DescriptorRendererModifier.MODALITY
@@ -82,6 +85,41 @@ val interfaceDescriptorRenderer = DescriptorRenderer.withOptions {
 
 }
 
+val annotationRenderer = DescriptorRenderer.withOptions {
+    excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
+    classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
+    withDefinedIn = false
+    modifiers = DescriptorRendererModifier.ALL
+    startFromName = false
+    startFromDeclarationKeyword = false
+    classWithPrimaryConstructor = true
+    verbose = true
+    unitReturnType = false
+    enhancedTypes = false // TODO ???
+    withoutReturnType = false
+    normalizedVisibilities = true // TODO find out
+    renderDefaultVisibility = false
+    overrideRenderingPolicy = OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE
+    textFormat = RenderingFormat.PLAIN
+    //                valueParametersHandler
+    withoutTypeParameters = false
+    receiverAfterName = false
+    renderCompanionObjectName = false
+    //                typeNormalizer
+    propertyAccessorRenderingPolicy = PropertyAccessorRenderingPolicy.PRETTY
+    alwaysRenderModifiers = true
+    renderConstructorKeyword = true
+    renderUnabbreviatedType = true
+    presentableUnresolvedTypes = true
+//                    defaultParameterValueRenderer = {
+//                    }
+    withoutSuperTypes = true
+    includePropertyConstant = false
+    annotationFilter = { true }
+    secondaryConstructorsAsPrimary = false
+}
+
+
 val DECOMPILED_COMMENT_FOR_PARAMETER = ""
 val FLEXIBLE_TYPE_COMMENT = ""
 val DECOMPILED_CONTRACT_STUB = ""
@@ -93,14 +131,13 @@ fun buildDecompiledText(
         packageFqName: FqName,
         descriptors: List<DeclarationDescriptor>,
         descriptorRenderer: DescriptorRenderer
-//        indexers: Collection<DecompiledTextIndexer<*>> = listOf(ByDescriptorIndexer)
 ): String {
     val builder = StringBuilder()
 
     val charactersAllowedInKotlinStringLiterals: Set<Char> = mutableSetOf<Char>().apply {
-        addAll('a' .. 'z')
-        addAll('A' .. 'Z')
-        addAll('0' .. '9')
+        addAll('a'..'z')
+        addAll('A'..'Z')
+        addAll('0'..'9')
         addAll(listOf('_', '@', ':', ';', '.', ',', '{', '}', '=', '[', ']', '^', '#', '*', ' '))
     }
 
@@ -139,7 +176,7 @@ fun buildDecompiledText(
             }
         }
 
-        builder.append("@file:Suppress(${suppress.joinToString { it.quoteAsKotlinLiteral() }})")
+//        builder.append("@file:Suppress(${suppress.joinToString { it.quoteAsKotlinLiteral() }})")
         if (!packageFqName.isRoot) {
             builder.append("package ").append(packageFqName).append("\n\n")
         }
@@ -148,13 +185,6 @@ fun buildDecompiledText(
 
     }
 
-
-//    val textIndex = DecompiledTextIndex(indexers)
-
-//    fun indexDescriptor(descriptor: DeclarationDescriptor, startOffset: Int, endOffset: Int) {
-//        textIndex.addToIndex(descriptor, TextRange(startOffset, endOffset))
-//    }
-
     fun renderSuperTypeWithConstructorCall(supertype: KotlinType): String {
         val correspondingClassDescriptor = supertype.constructor.declarationDescriptor as ClassDescriptor
 
@@ -162,10 +192,11 @@ fun buildDecompiledText(
                 if (correspondingClassDescriptor.constructors.isEmpty()) {
                     "()"
                 } else {
-                    "(" + correspondingClassDescriptor.constructors.first().valueParameters.joinToString { "TODO()" } + ")"
+                    "(" + correspondingClassDescriptor.constructors.first().valueParameters.joinToString {
+                        "TODO() as ${descriptorRenderer.renderType(it.type)}"
+                    } + ")"
                 }
     }
-
 
     fun renderSupertypes(klass: ClassDescriptor, callConstructors: Boolean = true) {
         if (KotlinBuiltIns.isNothing(klass.defaultType)) return
@@ -205,7 +236,7 @@ fun buildDecompiledText(
     fun renderConstant(value: ConstantValue<*>): String {
         return when (value) {
             is ArrayValue -> value.value.joinToString(", ", "{", "}") { renderConstant(it) }
-// TODO annotationValue
+            // TODO annotationValue
 //            is AnnotationValue -> renderAnnotation(value.value).removePrefix("@")
             is KClassValue -> {
                 var type = value.classId.asSingleFqName().asString()
@@ -214,6 +245,7 @@ fun buildDecompiledText(
             }
             is LongValue -> "0L"
             is UIntValue, is ULongValue, is UShortValue, is UByteValue -> "0u"
+            is IntValue, is ByteValue, is ShortValue -> "0"
             else -> value.toString()
         }
     }
@@ -223,6 +255,7 @@ fun buildDecompiledText(
     fun renderSecondaryConstructor(classDescriptor: ClassDescriptor, classConstructor: ClassConstructorDescriptor, indent: String) {
         builder.append(indent).append(descriptorRenderer.render(classConstructor))
 
+        // TODO add primary constructor call?
         val superToCall = classDescriptor.typeConstructor.supertypes.find { it.constructor.declarationDescriptor is ClassDescriptor }
         if (superToCall != null) {
             builder.append(": super")
@@ -231,13 +264,74 @@ fun buildDecompiledText(
             builder.append(if (correspondingClassDescriptor.constructors.isEmpty()) {
                 "()"
             } else {
-                "(" + correspondingClassDescriptor.constructors.first().valueParameters.joinToString { "TODO()" } + ")"
+                "(" + correspondingClassDescriptor.constructors.first().valueParameters.joinToString {
+                    "TODO() as ${descriptorRenderer.renderType(it.type)}"
+                } + ")"
             })
 
         }
-//        renderSupertypes(classDescriptor)
         builder.append("{ $TODO_CODE } \n")
     }
+
+    fun renderAnnotation(annotation: AnnotationDescriptor) {
+        val annotationClass = annotation.type.constructor.declarationDescriptor as ClassDescriptor
+        val annotationConstructor = annotationClass.constructors.singleOrNull()
+        if (annotationConstructor == null) {
+            builder.append(annotationRenderer.renderAnnotation(annotation))
+            builder.append("()")
+            return
+        }
+
+        // TODO name and more checks
+        val isBuildable = annotationConstructor.valueParameters.all {
+            KotlinBuiltIns.isString(it.type)
+                    || KotlinBuiltIns.isInt(it.type)
+                    || KotlinBuiltIns.isDouble(it.type)
+                    || KotlinBuiltIns.isBoolean(it.type)
+        }
+
+        if (!isBuildable) {
+//            builder.append("()")
+            return
+        }
+
+        builder.append(annotationRenderer.renderAnnotation(annotation))
+        builder.append("(")
+        val arguments = annotationConstructor.valueParameters.joinToString {
+            val type = it.type
+            when {
+                KotlinBuiltIns.isString(type) -> "\"\""
+                KotlinBuiltIns.isInt(type) -> "0"
+                KotlinBuiltIns.isDouble(type) -> "0.0"
+                KotlinBuiltIns.isBoolean(type) -> "false"
+                else -> TODO("wtf")
+            }
+        }
+        builder.append(arguments)
+        builder.append(")")
+    }
+
+    fun renderProperty(indent: String, descriptor: PropertyDescriptor) {
+        val containingDeclaration = descriptor.containingDeclaration
+
+        val renderInitializer = containingDeclaration !is ClassDescriptor || (containingDeclaration.kind != ClassKind.INTERFACE)
+        if (renderInitializer && descriptor.compileTimeInitializer != null) {
+            builder.append(" = ")
+            builder.append(renderConstant(descriptor.compileTimeInitializer!!))
+            return
+        }
+
+        if (descriptor.getter != null) {
+            builder.append("\n${indent}    get() = TODO()")
+        }
+
+        if (descriptor.setter != null) {
+            val setter = descriptor.setter!!
+            val argumentName = setter.valueParameters.first().name.toString()
+            builder.append("\n${indent}    set($argumentName: ${descriptorRenderer.renderType(descriptor.type)}) = TODO()")
+        }
+    }
+
 
     fun appendDescriptor(descriptorRenderer: DescriptorRenderer, descriptor: DeclarationDescriptor, indent: String, lastEnumEntry: Boolean? = null) {
         val startOffset = builder.length
@@ -261,25 +355,27 @@ fun buildDecompiledText(
 
             builder.append(if (lastEnumEntry!!) ";" else ",")
         } else {
+            for (annotation in descriptor.annotations) {
+                renderAnnotation(annotation)
+            }
             val render = descriptorRenderer.render(descriptor)
             builder.append(render.replace("= ...", DECOMPILED_COMMENT_FOR_PARAMETER))
 
             if (descriptor is ClassDescriptor) {
                 renderSupertypes(descriptor, descriptor.hasPrimaryConstructor())
             }
-
         }
         var endOffset = builder.length
 
         if (descriptor is CallableDescriptor) {
-            //NOTE: assuming that only return types can be flexible
+            // NOTE: assuming that only return types can be flexible
             if (descriptor.returnType!!.isFlexible()) {
                 builder.append(" ").append(FLEXIBLE_TYPE_COMMENT)
             }
         }
 
         if (descriptor is FunctionDescriptor || descriptor is PropertyDescriptor) {
-            if ((descriptor as MemberDescriptor).modality != Modality.ABSTRACT) {
+            if ((descriptor as MemberDescriptor).modality != Modality.ABSTRACT && !descriptor.isExternal) {
                 if (descriptor is FunctionDescriptor) {
                     with(builder) {
                         append(" { ")
@@ -290,19 +386,8 @@ fun buildDecompiledText(
                     }
                 } else {
                     // descriptor instanceof PropertyDescriptor
-                    descriptor as PropertyDescriptor
-                    val containingDeclaration = descriptor.containingDeclaration
-                    val renderInitializer = containingDeclaration !is ClassDescriptor || (containingDeclaration.kind != ClassKind.INTERFACE)
-                    if (renderInitializer) {
-                        builder.append(" = ")
-
-                        descriptor.compileTimeInitializer?.let {
-                            builder.append(renderConstant(it))
-                        } ?: builder.append(TODO_CODE)
-                    }
-
+                    renderProperty(indent, descriptor as PropertyDescriptor)
                 }
-                endOffset = builder.length
             }
         } else if (descriptor is ClassDescriptor && !DescriptorUtils.isEnumEntry(descriptor)) {
             builder.append(" {\n")
@@ -372,17 +457,10 @@ fun buildDecompiledText(
         }
 
         builder.append("\n")
-//        indexDescriptor(descriptor, startOffset, endOffset)
-
-//        if (descriptor is ClassDescriptor) {
-//            val primaryConstructor = descriptor.unsubstitutedPrimaryConstructor
-//            if (primaryConstructor != null) {
-//                indexDescriptor(primaryConstructor, startOffset, endOffset)
-//            }
-//        }
     }
 
     appendDecompiledTextAndPackageName()
+    println(packageFqName)
     for (member in descriptors) {
         appendDescriptor(descriptorRenderer, member, "")
         builder.append("\n")
