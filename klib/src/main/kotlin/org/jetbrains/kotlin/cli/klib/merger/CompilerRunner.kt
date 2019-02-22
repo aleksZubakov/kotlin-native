@@ -24,9 +24,15 @@ private fun executeCompiler(compiler: CLITool<*>, args: List<String>): Pair<Stri
 private fun CLICompiler<*>.compile(sources: List<File>, commonSources: List<File>, vararg mainArguments: String): String = buildString {
     val commonSourcesArgs = commonSources.map { "-Xcommon-sources=${it.absolutePath}" }
     val multiplatformFlag = if (commonSources.isNotEmpty()) "-Xmulti-platform" else ""
+    val common = if (commonSources.isNotEmpty()) {
+        commonSources.map { it.absolutePath.toString() } +
+                commonSourcesArgs + multiplatformFlag
+    } else {
+        listOf()
+    }
+
     val (output, exitCode) = executeCompiler(
-            this@compile, sources.map { it.absolutePath.toString() } + commonSources.map { it.absolutePath.toString() } +
-            commonSourcesArgs + multiplatformFlag + mainArguments
+            this@compile, sources.map { it.absolutePath.toString() } + common + mainArguments
     )
     appendln("Exit code: $exitCode")
     appendln("Output:")
@@ -35,4 +41,4 @@ private fun CLICompiler<*>.compile(sources: List<File>, commonSources: List<File
 
 
 fun compileNative(nativeSources: List<File>, commonSources: List<File>, output: File) =
-        K2Native().compile(nativeSources, commonSources, "-p", "library", "-o", output.absolutePath.toString())
+        K2Native().compile(nativeSources, commonSources, "-p", "library", "-nopack", "-Xdisable", "backend", "-o", output.absolutePath.toString())
