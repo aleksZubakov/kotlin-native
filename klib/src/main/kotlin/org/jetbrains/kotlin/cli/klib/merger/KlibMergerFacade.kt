@@ -9,21 +9,25 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.klib.DummyIntersector
 import org.jetbrains.kotlin.cli.klib.Intersector
 import org.jetbrains.kotlin.cli.klib.Library
+import org.jetbrains.kotlin.cli.klib.defaultRepository
 import org.jetbrains.kotlin.cli.klib.libraryInRepoOrCurrentDir
 import org.jetbrains.kotlin.cli.klib.merger.descriptors.ModuleWithTargets
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
+import org.jetbrains.kotlin.descriptors.konan.isKonanStdlib
+import org.jetbrains.kotlin.konan.KonanVersion
 import org.jetbrains.kotlin.konan.file.File
-import org.jetbrains.kotlin.konan.library.KonanLibrary
+import org.jetbrains.kotlin.konan.library.*
 import org.jetbrains.kotlin.konan.target.CompilerOutputKind
 import org.jetbrains.kotlin.konan.target.Distribution
+import org.jetbrains.kotlin.konan.target.KonanTarget
 import org.jetbrains.kotlin.konan.target.PlatformManager
 import org.jetbrains.kotlin.konan.utils.KonanFactories
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import org.jetbrains.kotlin.storage.StorageManager
 import java.util.*
 
-class KlibMergerFacade(private val repository: File, private val hostManager: PlatformManager) {
+class KlibMergerFacade(private val repository: File, private val hostManager: PlatformManager, libs: List<KonanLibrary>) {
     private val konanConfig: KonanConfig
 
     init {
@@ -40,7 +44,8 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
 
     }
 
-    fun merge(libs: List<KonanLibrary>): ModuleDescriptorImpl {
+    fun merge(libs: List<KonanLibrary>): List<ModuleDescriptorImpl> {
+        val newLoadDescriptors = loadDescriptors(repository, libs)
 //        val modulesWithTargets = loadModulesWithTargets(libs)
 //        val mergedModules = DeclarationDescriptorMerger(LockBasedStorageManager(), DefaultBuiltIns.Instance).merge(modulesWithTargets)
 //        mergedModules.setDependencies(mergedModules)
@@ -48,18 +53,19 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
         return /*serializeModule(mergedModules, konanConfig)*/ TODO()
     }
 
-    fun diff(libs: List<KonanLibrary>): Diff<ModuleDescriptorImpl> {
-        val modules = loadModulesWithTargets(libs).map { it.module }
-        return NewDeclarationDescriptorDiffer(DummyIntersector(), DefaultBuiltIns.Instance).diff(modules, modules)
-
+    fun diff(libs: List<KonanLibrary>): List<ModuleWithTargets> {
+        val newLoadDescriptors = loadDescriptors(repository, libs)
+//        val modules = loadModulesWithTargets(libs)
+//        return DeclarationDescriptorDiffer(LockBasedStorageManager(), DefaultBuiltIns.Instance).diff(modules)
+        return TODO()
     }
 
-    private fun loadModulesWithTargets(libs: List<KonanLibrary>): List<ModuleWithTargets> {
-        val modules = loadDescriptors(repository, libs)
-        val targets = libs.map { lib -> lib.targetList.map { hostManager.targetByName(it) } }
-
-        return (modules zip targets).map { (module, targets) -> ModuleWithTargets(module, targets) }
-    }
+//    private fun loadModulesWithTargets(libs: List<KonanLibrary>): List<ModuleWithTargets> {
+//        val modules = loadDescriptors(repository, libs)
+//        val targets = libs.map { lib -> lib.targetList.map { hostManager.targetByName(it) } }
+//
+//        return (modules zip targets).map { (module, targets) -> ModuleWithTargets(module, targets) }
+//    }
 
     fun mergeProperties(libs: List<KonanLibrary>): Properties = libs.map { it.manifestProperties }.first() // TODO
 }
@@ -69,40 +75,40 @@ fun loadStdlib(distribution: Distribution,
                storageManager: StorageManager): ModuleDescriptorImpl {
     val stdlib = Library(distribution.stdlib, null, "host")
     val library = libraryInRepoOrCurrentDir(stdlib.repository, stdlib.name)
-    return KonanFactories.DefaultDeserializedDescriptorFactory.createDescriptor(library, versionSpec, storageManager, DefaultBuiltIns.Instance)
+    val stdlibModule = KonanFactories.DefaultDeserializedDescriptorFactory.createDescriptorAndNewBuiltIns(library, versionSpec, storageManager)
+    stdlibModule.setDependencies(stdlibModule)
+    return stdlibModule
 }
 
 private val currentLanguageVersion = LanguageVersion.LATEST_STABLE
 private val currentApiVersion = ApiVersion.LATEST_STABLE
 
-var stdLibModule: ModuleDescriptorImpl? = null
-
-private fun loadDescriptors(repository: File, libraries: List<KonanLibrary>): List<ModuleDescriptorImpl> {
-    // TODO pass [currentLanguageVersion] and [currentApiVersion] as parameters
-    val versionSpec = LanguageVersionSettingsImpl(currentLanguageVersion, currentApiVersion)
+private fun loadDescriptors(repository: File, libs: List<KonanLibrary>): List<ModuleDescriptorImpl> {
+    val distribution = Distribution()
     val storageManager = LockBasedStorageManager()
+    val versionSpec = LanguageVersionSettingsImpl(currentLanguageVersion, currentApiVersion)
 
-    // TODO find out is it required to load and set stdlib as dependency
-    stdLibModule = loadStdlib(Distribution(), versionSpec, storageManager)
-    stdLibModule?.setDependencies(stdLibModule!!)
+    val stdLib = loadStdlib(distribution, versionSpec, storageManager)
+    val libariesNames = libs.map { it.libraryName }
+    val libraryResolver = defaultResolver(
+            listOf(defaultRepository.absolutePath),
+            libariesNames,
+            KonanTarget.MACOS_X64,
+            distribution,
+            logger = { println(it) },
+            compatibleCompilerVersions = listOf(KonanVersion.CURRENT)
+    ).libraryResolver()
 
-    val defaultBuiltins = stdLibModule!!.builtIns/*DefaultBuiltIns.Instance*/
-    val modules = mutableListOf<ModuleDescriptorImpl>()
-    for (lib in libraries) {
-        val konanLibrary = libraryInRepoOrCurrentDir(repository, lib.libraryName)
-        val curModule = KonanFactories.DefaultDeserializedDescriptorFactory
-                .createDescriptor(konanLibrary, versionSpec, storageManager, defaultBuiltins)
+    val resolveWithDependencies = libraryResolver.resolveWithDependencies(
+            unresolvedLibraries = libariesNames.toUnresolvedLibraries,
+            noStdLib = false,
+            noDefaultLibs = false
+    )
 
-        // TODO is it ok to set curModule as itself dependency?
-        /*modules + */listOf(curModule).let { allModules ->
-            for (it in allModules) {
-                it.setDependencies(listOf(stdLibModule!!, curModule))
-            }
-        }
-        modules.add(curModule)
-    }
+    val resolvedDependencies = KonanFactories.DefaultResolvedDescriptorsFactory.createResolved(
+            resolveWithDependencies, storageManager, stdLib.builtIns, versionSpec)
 
-    return modules
+    return resolvedDependencies.resolvedDescriptors.filter { !it.isKonanStdlib() }
 }
 
 
