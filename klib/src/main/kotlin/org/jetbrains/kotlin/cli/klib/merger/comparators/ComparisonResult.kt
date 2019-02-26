@@ -48,7 +48,9 @@ object Size : Cause()
 
 sealed class ComplexCause(val cause: List<Cause>) : Cause()
 
-class ParameterMismatch(causes: List<Cause>, val index: Int = -1) : ComplexCause(causes)
+class Parameter(causes: List<Cause>, val index: Int = -1) : ComplexCause(causes)
+class ParametersMismatched(causes: List<Parameter>) : ComplexCause(causes)
+
 class Function(causes: List<Cause>) : ComplexCause(causes)
 class Class(causes: List<Cause>) : ComplexCause(causes)
 class TypeAlias(causes: List<Cause>) : ComplexCause(causes)

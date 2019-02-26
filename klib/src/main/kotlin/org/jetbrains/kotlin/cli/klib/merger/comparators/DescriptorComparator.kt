@@ -86,7 +86,8 @@ class FunctionDescriptorComparator : DescriptorComparator {
     }
 
     private fun compareFunctionDescriptors(o1: FunctionDescriptor, o2: FunctionDescriptor): ComparisonResult =
-            (o1.name == o2.name).toResult(FqName) and
+    // TODO add more parameters
+            (o1.fqNameSafe == o2.fqNameSafe).toResult(FqName) and
                     (o1.isSuspend == o2.isSuspend).toResult(Suspend) and
                     (o1.returnType == o2.returnType).toResult(Type) and
                     compareParams(o1.explicitParameters, o2.explicitParameters)
@@ -96,16 +97,19 @@ class FunctionDescriptorComparator : DescriptorComparator {
             return Failure(Size)
         }
 
-        var result: ComparisonResult = Sucess()
+        val parametersMismatched = (o1 zip o2).map { (a, b) ->
+            ValueDescriptorComparator.INSTANCE.compare(a, b)
+        }.withIndex().filter { (_, compResult) -> compResult is Failure }
+                .map { (ind, compResult) ->
+                    compResult as Failure
+                    Parameter(compResult.cause, ind)
+                }
 
-        val valueDescriptorComparator = ValueDescriptorComparator.INSTANCE
-        for ((ind, descriptors) in (o1 zip o2).withIndex()) {
-            val (a, b) = descriptors
-            val compareValueDescriptors = valueDescriptorComparator.compare(a, b).map { ParameterMismatch(it, ind) }
-
-            result = result and compareValueDescriptors
+        return if (parametersMismatched.isNotEmpty()) {
+            Failure(ParametersMismatched(parametersMismatched))
+        } else {
+            Sucess()
         }
-        return result
     }
 
 }
