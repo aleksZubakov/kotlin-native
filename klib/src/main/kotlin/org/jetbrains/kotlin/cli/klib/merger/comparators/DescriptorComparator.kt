@@ -102,7 +102,7 @@ class FunctionDescriptorComparator : DescriptorComparator {
         }.withIndex().filter { (_, compResult) -> compResult is Failure }
                 .map { (ind, compResult) ->
                     compResult as Failure
-                    Parameter(compResult.cause, ind)
+                    Parameter(compResult.causes, ind)
                 }
 
         return if (parametersMismatched.isNotEmpty()) {
