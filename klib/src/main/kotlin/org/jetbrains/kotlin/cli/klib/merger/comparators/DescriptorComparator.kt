@@ -127,15 +127,15 @@ class ClassDescriptorComparator : DescriptorComparator {
         return compareClassDescriptors(o1, o2)
     }
 
-    private fun Collection<DeclarationDescriptor>.wrap(): Set<DescriptorHolder> = map { DescriptorHolder(it) }.toSet()
+//    private fun Collection<DeclarationDescriptor>.wrap(): Set<DescriptorHolder> = map { DescriptorHolder(it) }.toSet()
 
     private fun compareClassDescriptors(o1: ClassDescriptor, o2: ClassDescriptor): ComparisonResult {
         val firstMemberScope = o1.unsubstitutedMemberScope
         val secondMemberScope = o2.unsubstitutedMemberScope
 
-        fun compareDescriptors(kind: DescriptorKindFilter) =
-                firstMemberScope.getDescriptorsFiltered(kind).wrap() ==
-                        secondMemberScope.getDescriptorsFiltered(kind).wrap()
+//        fun compareDescriptors(kind: DescriptorKindFilter) =
+//                firstMemberScope.getDescriptorsFiltered(kind).wrap() ==
+//                        secondMemberScope.getDescriptorsFiltered(kind).wrap()
 
         return (o1.fqNameUnsafe == o2.fqNameUnsafe).toResult(FqName) and
                 (o1.kind == o2.kind).toResult(ClassKind) /*and TODO
