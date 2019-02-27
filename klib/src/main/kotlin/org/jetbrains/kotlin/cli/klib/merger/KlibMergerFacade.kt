@@ -3,11 +3,11 @@ package org.jetbrains.kotlin.cli.klib.merger
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.backend.konan.KonanConfig
 import org.jetbrains.kotlin.backend.konan.KonanConfigKeys
-import org.jetbrains.kotlin.backend.konan.library.LinkData
-import org.jetbrains.kotlin.backend.konan.serialization.serializeModule
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.cli.klib.DummyIntersector
+import org.jetbrains.kotlin.cli.klib.Intersector
 import org.jetbrains.kotlin.cli.klib.Library
 import org.jetbrains.kotlin.cli.klib.libraryInRepoOrCurrentDir
 import org.jetbrains.kotlin.config.*
@@ -40,16 +40,17 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
     }
 
     fun merge(libs: List<KonanLibrary>): ModuleDescriptorImpl {
-        val modulesWithTargets = loadModulesWithTargets(libs)
-        val mergedModules = DeclarationDescriptorMerger(LockBasedStorageManager(), DefaultBuiltIns.Instance).merge(modulesWithTargets)
+//        val modulesWithTargets = loadModulesWithTargets(libs)
+//        val mergedModules = DeclarationDescriptorMerger(LockBasedStorageManager(), DefaultBuiltIns.Instance).merge(modulesWithTargets)
 //        mergedModules.setDependencies(mergedModules)
 
-        return /*serializeModule(mergedModules, konanConfig)*/ mergedModules
+        return /*serializeModule(mergedModules, konanConfig)*/ TODO()
     }
 
-    fun diff(libs: List<KonanLibrary>): List<ModuleWithTargets> {
-        val modules = loadModulesWithTargets(libs)
-        return DeclarationDescriptorDiffer(LockBasedStorageManager(), DefaultBuiltIns.Instance).diff(modules)
+    fun diff(libs: List<KonanLibrary>): Diff<ModuleDescriptorImpl> {
+        val modules = loadModulesWithTargets(libs).map { it.module }
+        return NewDeclarationDescriptorDiffer(DummyIntersector(), DefaultBuiltIns.Instance).diff(modules, modules)
+
     }
 
     private fun loadModulesWithTargets(libs: List<KonanLibrary>): List<ModuleWithTargets> {

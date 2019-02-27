@@ -2,13 +2,9 @@ package org.jetbrains.kotlin.cli.klib.merger.comparators
 
 import org.jetbrains.kotlin.backend.common.descriptors.explicitParameters
 import org.jetbrains.kotlin.backend.common.descriptors.isSuspend
-import org.jetbrains.kotlin.cli.klib.merger.DescriptorHolder
-import org.jetbrains.kotlin.cli.klib.merger.descriptors.MergedSimpleFunctionDescriptor
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
-import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
-import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 
 interface DescriptorComparator {
     fun compare(o1: DeclarationDescriptor, o2: DeclarationDescriptor): ComparisonResult
