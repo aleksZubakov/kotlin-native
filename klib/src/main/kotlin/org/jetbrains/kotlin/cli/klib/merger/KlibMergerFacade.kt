@@ -83,7 +83,7 @@ fun loadStdlib(distribution: Distribution,
 private val currentLanguageVersion = LanguageVersion.LATEST_STABLE
 private val currentApiVersion = ApiVersion.LATEST_STABLE
 
-private fun loadDescriptors(repository: File, libs: List<KonanLibrary>): List<ModuleDescriptorImpl> {
+private fun loadDescriptors(repository: File, libs: List<KonanLibrary>, target: KonanTarget = KonanTarget.MACOS_X64): List<ModuleDescriptorImpl> {
     val distribution = Distribution()
     val storageManager = LockBasedStorageManager()
     val versionSpec = LanguageVersionSettingsImpl(currentLanguageVersion, currentApiVersion)
@@ -93,7 +93,7 @@ private fun loadDescriptors(repository: File, libs: List<KonanLibrary>): List<Mo
     val libraryResolver = defaultResolver(
             listOf(defaultRepository.absolutePath),
             libariesNames,
-            KonanTarget.MACOS_X64,
+            target,
             distribution,
             logger = { println(it) },
             compatibleCompilerVersions = listOf(KonanVersion.CURRENT)
