@@ -15,7 +15,7 @@ interface DescriptorComparator {
 
 class TotalComparator : DescriptorComparator {
     override fun compare(o1: DeclarationDescriptor, o2: DeclarationDescriptor): ComparisonResult {
-        if (o1 === o2) return Sucess()
+        if (o1 === o2) return Success()
 
         return when {
             o1 is FunctionDescriptor && o2 is FunctionDescriptor ->
@@ -108,7 +108,7 @@ class FunctionDescriptorComparator : DescriptorComparator {
         return if (parametersMismatched.isNotEmpty()) {
             Failure(ParametersMismatched(parametersMismatched))
         } else {
-            Sucess()
+            Success()
         }
     }
 

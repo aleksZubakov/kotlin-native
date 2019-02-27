@@ -2,29 +2,29 @@ package org.jetbrains.kotlin.cli.klib.merger.comparators
 
 sealed class ComparisonResult
 
-class Sucess : ComparisonResult()
+class Success : ComparisonResult()
 class Failure(val causes: List<Cause>) : ComparisonResult() {
     constructor(cause: Cause) : this(listOf(cause))
 }
 
 infix fun ComparisonResult.and(other: ComparisonResult): ComparisonResult {
     return when (this) {
-        is Sucess -> other
+        is Success -> other
         is Failure -> when (other) {
             is Failure -> Failure(this.causes + other.causes)
-            is Sucess -> this
+            is Success -> this
         }
     }
 }
 
 fun ComparisonResult.map(init: (List<Cause>) -> Cause): ComparisonResult {
     return when (this) {
-        is Sucess -> Sucess()
+        is Success -> Success()
         is Failure -> Failure(init(this.causes))
     }
 }
 
-fun Boolean.toResult(cause: Cause) = if (this) Sucess() else Failure(cause)
+fun Boolean.toResult(cause: Cause) = if (this) Success() else Failure(cause)
 
 sealed class Cause
 
