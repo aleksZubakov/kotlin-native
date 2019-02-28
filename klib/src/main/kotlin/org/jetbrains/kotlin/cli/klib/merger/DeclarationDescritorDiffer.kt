@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.cli.klib.CommonAndTargets
 import org.jetbrains.kotlin.cli.klib.Intersector
 import org.jetbrains.kotlin.cli.klib.OnlyCommon
+import org.jetbrains.kotlin.cli.klib.merger.descriptors.MergerFragmentDescriptor
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
 import org.jetbrains.kotlin.descriptors.konan.KonanModuleOrigin

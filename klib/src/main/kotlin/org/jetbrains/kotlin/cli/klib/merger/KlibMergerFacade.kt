@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.cli.klib.DummyIntersector
 import org.jetbrains.kotlin.cli.klib.Intersector
 import org.jetbrains.kotlin.cli.klib.Library
 import org.jetbrains.kotlin.cli.klib.libraryInRepoOrCurrentDir
+import org.jetbrains.kotlin.cli.klib.merger.descriptors.ModuleWithTargets
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
 import org.jetbrains.kotlin.konan.file.File
