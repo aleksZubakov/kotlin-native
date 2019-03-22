@@ -25,7 +25,13 @@ import org.jetbrains.kotlin.konan.utils.KonanFactories
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import java.util.*
 
-class KlibMergerFacade(private val repository: File, private val hostManager: PlatformManager, libs: List<KonanLibrary>) {
+
+data class MergeResult(
+        val diff: Diff<ModuleDescriptorImpl> // ,
+//        val firstTargetDependencies: List<>
+)
+
+class KlibMergerFacade(private val repository: File, private val hostManager: PlatformManager/*, libs: List<KonanLibrary>*/) {
     private val konanConfig: KonanConfig
 
     init {
@@ -42,21 +48,52 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
 
     }
 
-    fun merge(libs: List<KonanLibrary>): List<ModuleDescriptorImpl> {
-        val newLoadDescriptors = loadDescriptors(repository, libs)
-//        val modulesWithTargets = loadModulesWithTargets(libs)
-//        val mergedModules = DeclarationDescriptorMerger(LockBasedStorageManager(), DefaultBuiltIns.Instance).merge(modulesWithTargets)
-//        mergedModules.setDependencies(mergedModules)
+    fun merge(firstTargetLibs: List<KonanLibrary>, secondTargetLibs: List<KonanLibrary>): Diff<ModuleDescriptorImpl> {
+        assert(firstTargetLibs.size == secondTargetLibs.size)
+        val descriptorLoader = DescriptorLoader(hostManager)
 
-        return /*serializeModule(mergedModules, konanConfig)*/ TODO()
+        val firstTargetModules = descriptorLoader.loadDescriptors(repository, firstTargetLibs)
+        val secondTargetModules = descriptorLoader.loadDescriptors(repository, secondTargetLibs)
+
+//        val descriptorFactory = MergerDescriptorFactory(DefaultBuiltIns.Instance, LockBasedStorageManager())
+        val newDeclarationDescriptorDiffer = DeclarationDescriptorMerger(DummyIntersector())
+
+        return newDeclarationDescriptorDiffer.diff(firstTargetModules, secondTargetModules).let { (firstTarget, secondTarget, common) ->
+            val mergerIRToDeclarationDescriptorVisitor = MergedIRToDescriptorsVisitor(DefaultBuiltIns.Instance)
+
+            val firstTargetModules = firstTarget.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
+                it.forEach { mod ->
+                    mod.setDependencies(it)
+                }
+            }
+            val secondTargetModules = secondTarget.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
+                it.forEach { mod ->
+                    mod.setDependencies(it)
+                }
+            }
+
+            val commonTargetModules = common.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
+                it.forEach { mod ->
+                    mod.setDependencies(it)
+                }
+            }
+
+
+//            return commonTargetModules
+            return@let Diff(
+                    firstTargetModules = firstTargetModules,
+                    secondTargetModules = secondTargetModules,
+                    commonModules = commonTargetModules
+            )
+        }
     }
 
-    fun diff(libs: List<KonanLibrary>): List<ModuleWithTargets> {
-        val newLoadDescriptors = loadDescriptors(repository, libs)
-//        val modules = loadModulesWithTargets(libs)
-//        return DeclarationDescriptorDiffer(LockBasedStorageManager(), DefaultBuiltIns.Instance).diff(modules)
-        return TODO()
-    }
+//    fun diff(libs: List<KonanLibrary>): List<ModuleWithTargets> {
+//        val newLoadDescriptors = loadDescriptors(repository, libs)
+////        val modules = loadModulesWithTargets(libs)
+////        return DeclarationDescriptorDiffer(LockBasedStorageManager(), DefaultBuiltIns.Instance).diff(modules)
+//        return TODO()
+//    }
 
 //    private fun loadModulesWithTargets(libs: List<KonanLibrary>): List<ModuleWithTargets> {
 //        val modules = loadDescriptors(repository, libs)
