@@ -4,9 +4,14 @@ import org.jetbrains.kotlin.cli.bc.K2Native
 import org.jetbrains.kotlin.cli.common.CLICompiler
 import org.jetbrains.kotlin.cli.common.CLITool
 import org.jetbrains.kotlin.cli.common.ExitCode
+import org.jetbrains.kotlin.cli.klib.merger.descriptors.MergerK2MetadataCompiler
+import org.jetbrains.kotlin.cli.metadata.K2MetadataCompiler
 import org.jetbrains.kotlin.konan.file.File
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 
 
 private fun executeCompiler(compiler: CLITool<*>, args: List<String>): Pair<String, ExitCode> {
@@ -40,5 +45,23 @@ private fun CLICompiler<*>.compile(sources: List<File>, commonSources: List<File
 }/*.trimTrailingWhitespacesAndAddNewlineAtEOF().trimEnd('\r', '\n')*/
 
 
+private fun findStdlibCommon(): java.io.File {
+    // Take kotlin-stdlib-common.jar from dist/ when it's there
+    val fromDist = java.io.File("../kotlin/dist/kotlinc/lib/kotlin-stdlib-common.jar")
+    if (fromDist.isFile) return fromDist
+
+    val stdlibCommonLibsDir = "../kotlin/libraries/stdlib/common/build/libs"
+    val commonLibs = Files.newDirectoryStream(Paths.get(stdlibCommonLibsDir)).use(Iterable<Path>::toList)
+    return commonLibs.sorted().findLast {
+        val name = it.toFile().name
+        !name.endsWith("-javadoc.jar") && !name.endsWith("-sources.jar") && !name.contains("coroutines")
+    }?.toFile() ?: error("kotlin-stdlib-common is not found in $stdlibCommonLibsDir")
+}
+
+
 fun compileNative(nativeSources: List<File>, commonSources: List<File>, output: File) =
         K2Native().compile(nativeSources, commonSources, "-p", "library", "-nopack", "-Xdisable", "backend", "-o", output.absolutePath.toString())
+
+
+fun compileOnlyCommon(commonSources: List<File>, output: File) =
+        MergerK2MetadataCompiler().compile(commonSources, emptyList(), "-d", output.absolutePath.toString(), "-cp", findStdlibCommon().absolutePath)
