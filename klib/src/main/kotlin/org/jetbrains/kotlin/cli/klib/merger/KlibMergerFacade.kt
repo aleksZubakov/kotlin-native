@@ -112,7 +112,7 @@ class DescriptorLoader(val hostManager: PlatformManager) {
     }
 
     val distribution = Distribution()
-    val storageManager = LockBasedStorageManager()
+    val storageManager = LockBasedStorageManager("")
     val versionSpec = LanguageVersionSettingsImpl(currentLanguageVersion, currentApiVersion)
     val stdLib = loadStdlib()
 

@@ -120,7 +120,7 @@ fun DeclarationDescriptor.toMergedIR(isExpect: Boolean = false, isActual: Boolea
 
 
 class MergedIRToDescriptorsVisitor(builtIns: KotlinBuiltIns) {
-    val descriptorFactory = MergerDescriptorFactory(builtIns, LockBasedStorageManager())
+    val descriptorFactory = MergerDescriptorFactory(builtIns, LockBasedStorageManager("TODO"))
     fun visitModule(mergedModule: MergedModule, containingDeclarationDescriptor: DeclarationDescriptor?): ModuleDescriptorImpl {
         val moduleDescriptorImpl = descriptorFactory.createModule(
                 mergedModule.oldModuleDescriptorImpl.name

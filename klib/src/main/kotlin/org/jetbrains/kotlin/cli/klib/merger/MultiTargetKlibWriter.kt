@@ -126,30 +126,32 @@ class MultiTargetKlibWriter(val libDir: File,
         val targetVersion = lib.manifestProperties.getProperty(KLIB_PROPERTY_COMPILER_VERSION).parseKonanVersion()
         val abiVersion = lib.manifestProperties.getProperty(KLIB_PROPERTY_ABI_VERSION).parseKonanAbiVersion()
         for (target in lib.targetList.map { hostManager.targetByName(it) }) {
-            val resolver = defaultResolver(
-                    listOf(repository.absolutePath), emptyList(), target, Distribution(),
-                    skipCurrentDir = true,
-                    abiVersion = abiVersion,
-                    compatibleCompilerVersions = listOf(targetVersion))
-            val currentLib = resolver.resolve(lib.libraryName)
+            // TODO comment out when serilization of merged descriptors is ready
 
-            val singleTargetLibraryWriterImpl = SingleTargetLibraryWriterImpl(output, target)
-            currentLib.dataFlowGraph?.let { singleTargetLibraryWriterImpl.addDataFlowGraph(it) }
+//            val resolver = defaultResolver(
+//                    listOf(repository.absolutePath), emptyList(), target, Distribution(),
+//                    skipCurrentDir = true,
+////                    abiVersion = abiVersion,
+//                    compatibleCompilerVersions = listOf(targetVersion))
+//            val currentLib = resolver.resolve(lib.libraryName)
+//
+//            val singleTargetLibraryWriterImpl = SingleTargetLibraryWriterImpl(output, target)
+//            currentLib.dataFlowGraph?.let { singleTargetLibraryWriterImpl.addDataFlowGraph(it) }
 
-            currentLib.kotlinBitcodePaths.forEach {
-                singleTargetLibraryWriterImpl.addKotlinBitcode(it)
-            }
-
-            currentLib.includedPaths.forEach {
-                singleTargetLibraryWriterImpl.addIncludedBinary(it)
-            }
-
-            val kotlinIncludePaths = currentLib.kotlinBitcodePaths.toSet()
-            currentLib.bitcodePaths.forEach {
-                if (!kotlinIncludePaths.contains(it)) {
-                    singleTargetLibraryWriterImpl.addNativeBitcode(it)
-                }
-            }
+//            currentLib.kotlinBitcodePaths.forEach {
+//                singleTargetLibraryWriterImpl.addKotlinBitcode(it)
+//            }
+//
+//            currentLib.includedPaths.forEach {
+//                singleTargetLibraryWriterImpl.addIncludedBinary(it)
+//            }
+//
+//            val kotlinIncludePaths = currentLib.kotlinBitcodePaths.toSet()
+//            currentLib.bitcodePaths.forEach {
+//                if (!kotlinIncludePaths.contains(it)) {
+//                    singleTargetLibraryWriterImpl.addNativeBitcode(it)
+//                }
+//            }
         }
     }
 

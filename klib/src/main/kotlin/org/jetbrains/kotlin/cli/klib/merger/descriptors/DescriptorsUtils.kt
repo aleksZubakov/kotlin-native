@@ -45,7 +45,7 @@ class MergerFragmentDescriptor(moduleDescriptor: ModuleDescriptor,
 open class KlibMergerMemberScope(val members: List<DeclarationDescriptor>, storageManager: StorageManager) : MemberScopeImpl() {
     override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? =
             members.filterIsInstance<ClassifierDescriptor>()
-                    .atMostOne { it.name == name }
+                    .firstOrNull/*atMostOnce*/{ it.name == name }
 
     override fun getContributedVariables(name: Name, location: LookupLocation): Collection<PropertyDescriptor> =
             members.filterIsInstance<PropertyDescriptor>()
@@ -142,7 +142,7 @@ class KlibMergerClassMemberScope(members: List<DeclarationDescriptor>, storageMa
 
     override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? =
             members.filterIsInstance<ClassifierDescriptor>()
-                    .atMostOne { it.name == name }
+                    .firstOrNull/*atMostOne*/ { it.name == name }
 
     override fun getContributedVariables(name: Name, location: LookupLocation): Collection<PropertyDescriptor> =
             properties(name)
@@ -288,7 +288,7 @@ class MergerDescriptorFactory(val builtIns: KotlinBuiltIns, val storageManager: 
 
     // TODO pass builtins as class property
     fun createModule(moduleName: Name): ModuleDescriptorImpl {
-        val storageManager = LockBasedStorageManager()
+        val storageManager = LockBasedStorageManager("TODO")
         val origin = SyntheticModulesOrigin // TODO find out is it ok to use that origins
 
         return ModuleDescriptorImpl(

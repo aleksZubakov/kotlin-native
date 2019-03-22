@@ -316,10 +316,13 @@ fun buildDecompiledText(
             is ArrayValue -> value.value.joinToString(", ", "{", "}") { renderConstant(it) }
             // TODO annotationValue
 //            is AnnotationValue -> renderAnnotation(value.value).removePrefix("@")
-            is KClassValue -> {
-                var type = value.classId.asSingleFqName().asString()
-                repeat(value.arrayDimensions) { type = "kotlin.Array<$type>" }
-                "$type::class"
+            is KClassValue -> when (val classValue = value.value) {
+                is KClassValue.Value.LocalClass -> "${classValue.type}::class"
+                is KClassValue.Value.NormalClass -> {
+                    var type = classValue.classId.asSingleFqName().asString()
+                    repeat(classValue.arrayDimensions) { type = "kotlin.Array<$type>" }
+                    "$type::class"
+                }
             }
             is LongValue -> "0L"
             is UIntValue, is ULongValue, is UShortValue, is UByteValue -> "0u"
