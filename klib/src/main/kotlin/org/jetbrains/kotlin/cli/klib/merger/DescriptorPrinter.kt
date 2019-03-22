@@ -1,9 +1,11 @@
 package org.jetbrains.kotlin.cli.klib.merger
 
+import com.google.protobuf.Descriptors
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.contracts.description.ContractProviderKey
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
+import org.jetbrains.kotlin.ir.util.DescriptorsRemapper
 import org.jetbrains.kotlin.js.descriptorUtils.hasPrimaryConstructor
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.renderer.*
@@ -22,7 +24,7 @@ fun printDescriptors(packageFqName: FqName, descriptors: List<DeclarationDescrip
                     modifiers = DescriptorRendererModifier.ALL
                     startFromName = false
                     startFromDeclarationKeyword = false
-                    classWithPrimaryConstructor = true
+//                    classWithPrimaryConstructor = true
                     verbose = true
                     unitReturnType = false
                     enhancedTypes = false // TODO ???
@@ -50,14 +52,86 @@ fun printDescriptors(packageFqName: FqName, descriptors: List<DeclarationDescrip
                     secondaryConstructorsAsPrimary = false
                 })
 
+
+val wholeRenderer = DescriptorRenderer.withOptions {
+    classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
+    withDefinedIn = false
+    modifiers = DescriptorRendererModifier.ALL
+    startFromName = false
+    startFromDeclarationKeyword = false
+//    classWithPrimaryConstructor = true
+    verbose = true
+    unitReturnType = false
+    enhancedTypes = false // TODO ???
+    withoutReturnType = false
+    normalizedVisibilities = true // TODO find out
+    renderDefaultVisibility = false
+    overrideRenderingPolicy = OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE
+    textFormat = RenderingFormat.PLAIN
+    //                valueParametersHandler
+    withoutTypeParameters = false
+    receiverAfterName = false
+    renderCompanionObjectName = false
+    //                typeNormalizer
+    propertyAccessorRenderingPolicy = PropertyAccessorRenderingPolicy.PRETTY
+    alwaysRenderModifiers = true
+    renderConstructorKeyword = true
+    renderUnabbreviatedType = true
+    presentableUnresolvedTypes = true
+//                    defaultParameterValueRenderer = {
+//                    }
+    withoutSuperTypes = true
+    includePropertyConstant = false
+    annotationFilter = { false }
+    excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
+    secondaryConstructorsAsPrimary = false
+}
+
+val rendererWithoutExpectActual = DescriptorRenderer.withOptions {
+    classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
+    withDefinedIn = false
+    modifiers = DescriptorRendererModifier.ALL.toMutableSet().also {
+        it.remove(DescriptorRendererModifier.EXPECT)
+        it.remove(DescriptorRendererModifier.ACTUAL)
+    }
+    startFromName = false
+    startFromDeclarationKeyword = false
+//    classWithPrimaryConstructor = true
+    verbose = true
+    unitReturnType = false
+    enhancedTypes = false // TODO ???
+    withoutReturnType = false
+    normalizedVisibilities = true // TODO find out
+    renderDefaultVisibility = false
+    overrideRenderingPolicy = OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE
+    textFormat = RenderingFormat.PLAIN
+    //                valueParametersHandler
+    withoutTypeParameters = false
+    receiverAfterName = false
+    renderCompanionObjectName = false
+    //                typeNormalizer
+    propertyAccessorRenderingPolicy = PropertyAccessorRenderingPolicy.PRETTY
+    alwaysRenderModifiers = true
+    renderConstructorKeyword = true
+    renderUnabbreviatedType = true
+    presentableUnresolvedTypes = true
+//                    defaultParameterValueRenderer = {
+//                    }
+    withoutSuperTypes = true
+    includePropertyConstant = false
+    annotationFilter = { false }
+    excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
+    secondaryConstructorsAsPrimary = false
+}
+
 val interfaceDescriptorRenderer = DescriptorRenderer.withOptions {
     excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
     classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
     withDefinedIn = false
-    modifiers = DescriptorRendererModifier.ALL - DescriptorRendererModifier.MODALITY
+    modifiers = DescriptorRendererModifier.ALL - DescriptorRendererModifier.MODALITY - DescriptorRendererModifier.EXPECT
     startFromName = false
     startFromDeclarationKeyword = false
-    classWithPrimaryConstructor = true
+//    classWithPrimaryConstructor = true
     verbose = true
     unitReturnType = false
     enhancedTypes = false // TODO ???
@@ -158,25 +232,25 @@ fun buildDecompiledText(
 
 
     fun appendDecompiledTextAndPackageName() {
-        builder.append("// IntelliJ API Decompiler stub source generated from a class file\n" + "// Implementation of methods is not available")
-        builder.append("\n\n")
+//        builder.append("// IntelliJ API Decompiler stub source generated from a class file\n" + "// Implementation of methods is not available")
+//        builder.append("\n\n")
         val suppress = mutableListOf("UNUSED_VARIABLE", "UNUSED_EXPRESSION").apply {
             if (true) {
-                add("CONFLICTING_OVERLOADS")
-                add("RETURN_TYPE_MISMATCH_ON_INHERITANCE")
-                add("RETURN_TYPE_MISMATCH_ON_OVERRIDE")
-                add("WRONG_MODIFIER_CONTAINING_DECLARATION") // For `final val` in interface.
-                add("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
+//                add("CONFLICTING_OVERLOADS")
+//                add("RETURN_TYPE_MISMATCH_ON_INHERITANCE")
+//                add("RETURN_TYPE_MISMATCH_ON_OVERRIDE")
+//                add("WRONG_MODIFIER_CONTAINING_DECLARATION") // For `final val` in interface.
+//                add("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
                 add("UNUSED_PARAMETER") // For constructors.
-                add("MANY_IMPL_MEMBER_NOT_IMPLEMENTED") // Workaround for multiple-inherited properties.
-                add("MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED") // Workaround for multiple-inherited properties.
-                add("EXTENSION_SHADOWED_BY_MEMBER") // For Objective-C categories represented as extensions.
+//                add("MANY_IMPL_MEMBER_NOT_IMPLEMENTED") // Workaround for multiple-inherited properties.
+//                add("MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED") // Workaround for multiple-inherited properties.
+//                add("EXTENSION_SHADOWED_BY_MEMBER") // For Objective-C categories represented as extensions.
                 add("REDUNDANT_NULLABLE") // This warning appears due to Obj-C typedef nullability incomplete support.
-                add("DEPRECATION") // For uncheckedCast.
+//                add("DEPRECATION") // For uncheckedCast.
             }
         }
 
-//        builder.append("@file:Suppress(${suppress.joinToString { it.quoteAsKotlinLiteral() }})")
+        builder.append("@file:Suppress(${suppress.joinToString { it.quoteAsKotlinLiteral() }})\n\n")
         if (!packageFqName.isRoot) {
             builder.append("package ").append(packageFqName).append("\n\n")
         }
@@ -185,7 +259,11 @@ fun buildDecompiledText(
 
     }
 
-    fun renderSuperTypeWithConstructorCall(supertype: KotlinType): String {
+    fun renderSuperTypeWithConstructorCall(supertype: KotlinType, isExpect: Boolean = false): String {
+        if (isExpect) {
+            return descriptorRenderer.renderType(supertype)
+        }
+
         val correspondingClassDescriptor = supertype.constructor.declarationDescriptor as ClassDescriptor
 
         return descriptorRenderer.renderType(supertype) +
@@ -223,7 +301,7 @@ fun buildDecompiledText(
 
             val firstConstructor =
                     if (find != null && klass.kind != ClassKind.INTERFACE) {
-                        renderSuperTypeWithConstructorCall(find)
+                        renderSuperTypeWithConstructorCall(find, klass.isExpect)
                     } else ""
 
             val map = supertypes.filter { it != find }.map { descriptorRenderer.renderType(it) } + firstConstructor
@@ -333,6 +411,31 @@ fun buildDecompiledText(
     }
 
 
+    fun renderVisibility(visibility: Visibility) {
+        builder.append(visibility.displayName).append(" ")
+    }
+
+    fun renderPrimaryConstructor(descriptorRenderer: DescriptorRenderer, konstructor: ClassConstructorDescriptor?, ll: Boolean = false, isExpect: Boolean = false) {
+        if (isExpect) {
+            return
+        }
+
+        if (konstructor != null) {
+            builder.append(" ")
+            for (annotation in konstructor.annotations) {
+                renderAnnotation(annotation)
+            }
+//            if (isActual) {
+//                builder.append("actual ")
+//            }
+            renderVisibility(konstructor.visibility)
+            builder.append("constructor")
+
+            val params = descriptorRenderer.renderValueParameters(konstructor.valueParameters, konstructor.hasSynthesizedParameterNames())
+            builder.append(params)
+        }
+    }
+
     fun appendDescriptor(descriptorRenderer: DescriptorRenderer, descriptor: DeclarationDescriptor, indent: String, lastEnumEntry: Boolean? = null) {
         val startOffset = builder.length
         if (DescriptorUtils.isEnumEntry(descriptor)) {
@@ -347,12 +450,13 @@ fun buildDecompiledText(
             // TODO similar to supertypes constructors
             val constructors = descriptor.enumEntryConstructors()
 
-            if (constructors.isEmpty()) {
-                builder.append("()")
-            } else {
-                builder.append("(" + constructors.first().valueParameters.joinToString { "TODO()" } + ")")
+            if (!descriptor.isExpect) {
+                if (constructors.isEmpty()) {
+                    builder.append("()")
+                } else {
+                    builder.append("(" + constructors.first().valueParameters.joinToString { "TODO()" } + ")")
+                }
             }
-
             builder.append(if (lastEnumEntry!!) ";" else ",")
         } else {
             for (annotation in descriptor.annotations) {
@@ -362,6 +466,9 @@ fun buildDecompiledText(
             builder.append(render.replace("= ...", DECOMPILED_COMMENT_FOR_PARAMETER))
 
             if (descriptor is ClassDescriptor) {
+                if (!descriptor.isCompanionObject) {
+                    renderPrimaryConstructor(descriptorRenderer, descriptor.unsubstitutedPrimaryConstructor, descriptor.isActual, descriptor.isExpect)
+                }
                 renderSupertypes(descriptor, descriptor.hasPrimaryConstructor())
             }
         }
@@ -375,14 +482,16 @@ fun buildDecompiledText(
         }
 
         if (descriptor is FunctionDescriptor || descriptor is PropertyDescriptor) {
-            if ((descriptor as MemberDescriptor).modality != Modality.ABSTRACT && !descriptor.isExternal) {
+            if ((descriptor as MemberDescriptor).modality != Modality.ABSTRACT && !descriptor.isExternal && !descriptor.isExpect) {
                 if (descriptor is FunctionDescriptor) {
                     with(builder) {
+                        //                        if (!isInterface) { // TODO check by containingDeclaration, not by param
                         append(" { ")
                         if (descriptor.getUserData(ContractProviderKey)?.getContractDescription() != null) {
                             append(DECOMPILED_CONTRACT_STUB).append("; ")
                         }
                         append(DECOMPILED_CODE_COMMENT).append(" }")
+//                        }
                     }
                 } else {
                     // descriptor instanceof PropertyDescriptor
@@ -403,8 +512,9 @@ fun buildDecompiledText(
                 }
             }
 
-
-            val secondaryConstructors = if (!descriptor.hasPrimaryConstructor() && descriptor.secondaryConstructors.isNotEmpty()) {
+            val secondaryConstructors = if (descriptor.isExpect) {
+                emptyList()
+            } else if (!descriptor.hasPrimaryConstructor() && descriptor.secondaryConstructors.isNotEmpty()) {
                 // TODO for all constructors, not in special case
                 val first = descriptor.secondaryConstructors.first()
                 renderSecondaryConstructor(descriptor, first, indent)
@@ -444,8 +554,11 @@ fun buildDecompiledText(
                 }
                 newlineExceptFirst()
                 builder.append(subindent)
+                // TODO inner interfaces
                 if (descriptor.kind == ClassKind.INTERFACE) {
                     appendDescriptor(interfaceDescriptorRenderer, member, subindent)
+                } else if (descriptor.isExpect) {
+                    appendDescriptor(rendererWithoutExpectActual, member, subindent)
                 } else {
                     appendDescriptor(descriptorRenderer, member, subindent)
                 }
