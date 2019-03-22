@@ -14,6 +14,12 @@ import org.jetbrains.kotlin.backend.konan.library.LinkData
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.backend.common.serialization.DeclarationTable
+import org.jetbrains.kotlin.backend.common.serialization.DescriptorTable
+import org.jetbrains.kotlin.ir.declarations.impl.IrModuleFragmentImpl
+import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
+import org.jetbrains.kotlin.ir.util.ConstantValueGenerator
+import org.jetbrains.kotlin.ir.util.SymbolTable
+import org.jetbrains.kotlin.ir.util.TypeTranslator
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.metadata.konan.KonanProtoBuf
@@ -24,6 +30,7 @@ import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter.Companion.CALLAB
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter.Companion.CLASSIFIERS
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.serialization.DescriptorSerializer
+import org.jetbrains.kotlin.serialization.konan.KonanMetadataVersion
 import org.jetbrains.kotlin.serialization.konan.SourceFileMap
 
 /*
@@ -48,6 +55,7 @@ internal class KonanSerializationUtil(val context: Context, val metadataVersion:
             val topSerializer: DescriptorSerializer,
             var classSerializer: DescriptorSerializer = topSerializer
     )
+
     private fun createNewContext(): SerializerContext {
         val extension = KonanSerializerExtension(context, metadataVersion, sourceFileMap, declarationTable)
         return SerializerContext(
@@ -62,8 +70,8 @@ internal class KonanSerializationUtil(val context: Context, val metadataVersion:
     }
 
     private fun serializeClass(packageName: FqName,
-                       builder: KonanProtoBuf.LinkDataClasses.Builder,
-                       classDescriptor: ClassDescriptor) {
+                               builder: KonanProtoBuf.LinkDataClasses.Builder,
+                               classDescriptor: ClassDescriptor) {
         with(serializerContext) {
             val previousSerializer = classSerializer
 
@@ -85,8 +93,8 @@ internal class KonanSerializationUtil(val context: Context, val metadataVersion:
     }
 
     private fun serializeClasses(packageName: FqName,
-                         builder: KonanProtoBuf.LinkDataClasses.Builder,
-                         descriptors: Collection<DeclarationDescriptor>) {
+                                 builder: KonanProtoBuf.LinkDataClasses.Builder,
+                                 descriptors: Collection<DeclarationDescriptor>) {
 
         for (descriptor in descriptors) {
             if (descriptor is ClassDescriptor) {
@@ -254,7 +262,9 @@ fun serializeModule(module: ModuleDescriptor, konanConfig: KonanConfig): LinkDat
 
     val irBuiltins = IrBuiltIns(module.builtIns, typeTranslator, symbolTable)
     context.irModule = IrModuleFragmentImpl(module, irBuiltins)
+    val declarationTable = KonanDeclarationTable(irBuiltins, DescriptorTable())
 
 
-    return KonanSerializationUtil(context, KonanMetadataVersion.INSTANCE).serializeModule(module)
+    // TODO serializedIr param
+    return KonanSerializationUtil(context, KonanMetadataVersion.INSTANCE, declarationTable).serializeModule(module, null)
 }

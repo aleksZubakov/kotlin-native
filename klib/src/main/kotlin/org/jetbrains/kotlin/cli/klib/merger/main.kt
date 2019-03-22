@@ -9,6 +9,12 @@ import org.jetbrains.kotlin.konan.target.Distribution
 import org.jetbrains.kotlin.konan.target.PlatformManager
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
+import java.nio.file.Paths
+
+fun File.resolve(path: String): File {
+    // TODO make pr to kotlin native shared
+    return File(java.io.File(this.path).resolve(path).absolutePath)
+}
 
 fun mergeLib(repository: File, platformsPaths: List<String>, whatToMerge: List<String>): Diff<ModuleDescriptorImpl> {
     val distribution = Distribution()
