@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
+import org.jetbrains.kotlin.types.KotlinType
 
 interface MergerIR {
     // TODO
@@ -56,7 +57,16 @@ sealed class MergedDescriptor(val isExpect: Boolean, val isActual: Boolean) : Me
 class MergedClass(val oldClassDescriptor: ClassDescriptor,
                   isExpect: Boolean = false,
                   isActual: Boolean = false) : MergedDescriptor(isExpect, isActual) {
-    val desciptors: MutableList<MergedDescriptor> = mutableListOf()
+    val desciptors = mutableListOf<MergedDescriptor>()
+    val supertypes = mutableListOf<KotlinType>()
+
+    fun addSuperType(supertype: KotlinType) {
+        this.supertypes.add(supertype)
+    }
+
+    fun addSupertypes(supertypes: Collection<KotlinType>) {
+        this.supertypes.addAll(supertypes)
+    }
 
     fun expand(newDescriptors: List<MergedDescriptor>) {
         desciptors.addAll(newDescriptors)
@@ -64,6 +74,15 @@ class MergedClass(val oldClassDescriptor: ClassDescriptor,
 
     override fun accept(visitor: MergedIRToDescriptorsVisitor, containingDeclarationDescriptor: DeclarationDescriptor?): DeclarationDescriptor =
             visitor.visitClass(this, containingDeclarationDescriptor)
+}
+
+class CommonTypeAlias(
+        oldTypeAliasDescriptor: TypeAliasDescriptor,
+        val supertypes: List<KotlinType>
+) : MergedTypeAlias(oldTypeAliasDescriptor, isExpect = true, isActual = false) {
+    override fun accept(visitor: MergedIRToDescriptorsVisitor, containingDeclarationDescriptor: DeclarationDescriptor?): DeclarationDescriptor {
+        return visitor.visitCommonTypeAlias(this, containingDeclarationDescriptor)
+    }
 }
 
 class MergedFunction(
@@ -93,25 +112,27 @@ class MergedProperty(
             visitor.visitPropertyDescriptor(this, containingDeclarationDescriptor)
 }
 
-class MergedTypeAlias(val oldTypeAliasDescriptor: TypeAliasDescriptor,
-                      isExpect: Boolean = false,
-                      isActual: Boolean = false) : MergedDescriptor(isExpect, isActual) {
+open class MergedTypeAlias(val oldTypeAliasDescriptor: TypeAliasDescriptor,
+                           isExpect: Boolean = false,
+                           isActual: Boolean = false) : MergedDescriptor(isExpect, isActual) {
     override fun accept(visitor: MergedIRToDescriptorsVisitor, containingDeclarationDescriptor: DeclarationDescriptor?): DeclarationDescriptor {
         return visitor.visitTypeAlias(this, containingDeclarationDescriptor)
     }
 }
 
-fun DeclarationDescriptor.toMergedDescriptor(isExpect: Boolean = false, isActual: Boolean = false): MergedDescriptor {
-    return when (this) {
-        is ClassDescriptor -> MergedClass(this, isExpect, isActual)
-        is FunctionDescriptor -> MergedFunction(this, isExpect, isActual)
-        is PropertyDescriptor -> MergedProperty(this, isExpect, isActual)
-        is TypeAliasDescriptor -> MergedTypeAlias(this, isExpect, isActual)
-//        is ValueDescriptor -> MergedValue(this, isExpect, isActual) ! TODO !
-        else -> {
-            TODO(":(")
-        }
-    }
+fun DeclarationDescriptor.toMergedDescriptor(isExpect: Boolean = false, isActual: Boolean = false): MergedDescriptor? {
+    // TODO check type before running visitor
+    return this.toMergedIR(isExpect, isActual) as? MergedDescriptor
+//    return when (this) {
+//        is ClassDescriptor -> MergedClass(this, isExpect, isActual)
+//        is FunctionDescriptor -> MergedFunction(this, isExpect, isActual)
+//        is PropertyDescriptor -> MergedProperty(this, isExpect, isActual)
+//        is TypeAliasDescriptor -> MergedTypeAlias(this, isExpect, isActual)
+////        is ValueDescriptor -> MergedValue(this, isExpect, isActual) ! TODO !
+//        else -> {
+//            TODO(":(")
+//        }
+//    }
 }
 
 fun DeclarationDescriptor.toMergedIR(isExpect: Boolean = false, isActual: Boolean = false): MergerIR {
@@ -155,7 +176,7 @@ class MergedIRToDescriptorsVisitor(builtIns: KotlinBuiltIns) {
 
         val classDescriptor = with(mergedClass) {
             // TODO update supertypes KotlinTypes?
-            descriptorFactory.createClass(oldClassDescriptor, containingDeclarationDescriptor, oldClassDescriptor.typeConstructor.supertypes, isExpect, isActual)
+            descriptorFactory.createClass(oldClassDescriptor, containingDeclarationDescriptor, supertypes, isExpect, isActual)
         }
 
         val newConstructors = mergedClass.oldClassDescriptor.constructors.map {
@@ -254,6 +275,23 @@ class MergedIRToDescriptorsVisitor(builtIns: KotlinBuiltIns) {
 
         return typeAliasDescriptor
     }
+
+    fun visitCommonTypeAlias(commonTypeAlias: CommonTypeAlias, containingDeclarationDescriptor: DeclarationDescriptor?): DeclarationDescriptor {
+        val commonTypeAliasDescriptor = with(commonTypeAlias) {
+            val oldClassDescriptor = oldTypeAliasDescriptor.expandedType.constructor.declarationDescriptor!! as ClassDescriptor
+            descriptorFactory.createEmptyClass(oldTypeAliasDescriptor, oldClassDescriptor, containingDeclarationDescriptor!!, supertypes, isExpect, isActual)
+        }
+
+
+
+        commonTypeAliasDescriptor.initialize(
+                KlibMergerMemberScope(emptyList(), descriptorFactory.storageManager),
+                emptySet(),
+                null
+        )
+
+        return commonTypeAliasDescriptor
+    }
 }
 
 private class DeclarationDescriptorToMergedIRVisitor(val isExpect: Boolean = false, val isActual: Boolean = false) : DeclarationDescriptorVisitorEmptyBodies<MergerIR, Unit>() {
@@ -298,6 +336,7 @@ private class DeclarationDescriptorToMergedIRVisitor(val isExpect: Boolean = fal
                 isActual
         ).also {
             it.expand(members)
+            it.addSupertypes(descriptor.typeConstructor.supertypes)
         }
     }
 

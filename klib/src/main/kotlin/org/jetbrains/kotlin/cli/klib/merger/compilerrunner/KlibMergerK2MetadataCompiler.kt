@@ -1,4 +1,4 @@
-package org.jetbrains.kotlin.cli.klib.merger.descriptors
+package org.jetbrains.kotlin.cli.klib.merger.compilerrunner
 
 import com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.cli.common.*
@@ -22,8 +22,9 @@ import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.utils.KotlinPaths
 import java.io.File
 
-class MergerK2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
-    private val performanceManager: K2MetadataCompilerPerformanceManager = K2MetadataCompilerPerformanceManager()
+class KlibMergerK2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
+
+    override val performanceManager = K2MetadataCompilerPerformanceManager()
 
     override fun createArguments() = K2MetadataCompilerArguments()
 
@@ -48,6 +49,7 @@ class MergerK2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
             configuration.addKotlinSourceRoot(arg, isCommon = true)
         }
         if (arguments.classpath != null) {
+            // HERE
             configuration.addJvmClasspathRoots(arguments.classpath!!.split(File.pathSeparatorChar).map(::File))
         }
 
@@ -84,7 +86,7 @@ class MergerK2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
             val metadataVersion =
                     configuration.get(CommonConfigurationKeys.METADATA_VERSION) as? BuiltInsBinaryVersion
                             ?: BuiltInsBinaryVersion.INSTANCE
-            MetadataSerializer(metadataVersion, true).serialize(environment)
+            KlibMergerMetadataSerializer(metadataVersion, true).serialize(environment)
         } catch (e: CompilationException) {
             collector.report(CompilerMessageSeverity.EXCEPTION, OutputMessageUtil.renderException(e), MessageUtil.psiElementToMessageLocation(e.element))
             return ExitCode.INTERNAL_ERROR
@@ -98,14 +100,12 @@ class MergerK2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
 
     override fun createMetadataVersion(versionArray: IntArray): BinaryVersion = BuiltInsBinaryVersion(*versionArray)
 
-    override fun getPerformanceManager(): CommonCompilerPerformanceManager = performanceManager
-
     companion object {
         @JvmStatic
         fun main(args: Array<String>) {
-            doMain(MergerK2MetadataCompiler(), args)
+            doMain(KlibMergerK2MetadataCompiler(), args)
         }
     }
 
-    private class K2MetadataCompilerPerformanceManager : CommonCompilerPerformanceManager("Kotlin to Metadata compiler")
+    protected class K2MetadataCompilerPerformanceManager : CommonCompilerPerformanceManager("Kotlin to Metadata compiler")
 }

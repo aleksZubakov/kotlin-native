@@ -155,11 +155,6 @@ class DeclarationDescriptorMerger(val intersector: DummyIntersector) {
                     continue
                 }
 
-                if (firstDescriptor.name.toString() == "matrix_multiply") {
-                    println("whaa")
-                }
-
-
                 val intersectResult = intersector.intersect(firstDescriptor, secondDescriptor/*, commonContainingDeclarationDescriptor, firstTargetConainingDeclarationDescriptor,
                         secondTargetContainingDeclarationDescriptor*/)
 
@@ -186,8 +181,8 @@ class DeclarationDescriptorMerger(val intersector: DummyIntersector) {
         }
 
         // TODO update descriptors in target modules
-        finalFirstTargetDescriptors.addAll(firstTargetDescriptors.filter { it !in passed }.map { it.toMergedDescriptor() })
-        finalSecondTargetDescriptors.addAll(secondTargetDescriptors.filter { it !in passed }.map { it.toMergedDescriptor() })
+        finalFirstTargetDescriptors.addAll(firstTargetDescriptors.filter { it !in passed }.map { it.toMergedDescriptor() }.filterNotNull())
+        finalSecondTargetDescriptors.addAll(secondTargetDescriptors.filter { it !in passed }.map { it.toMergedDescriptor() }.filterNotNull())
 
         return Diff(finalFirstTargetDescriptors, finalSecondTargetDescriptors, finalCommonDescriptors)
     }

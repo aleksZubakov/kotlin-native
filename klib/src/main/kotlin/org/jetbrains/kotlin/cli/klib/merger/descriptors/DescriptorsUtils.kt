@@ -181,7 +181,8 @@ class MergerTypeAliasDescriptor(
         name: Name,
         visibility: Visibility,
         private var isExpect: Boolean,
-        private var isActual: Boolean
+        private var isActual: Boolean,
+        private val isExternal: Boolean
 ) : AbstractTypeAliasDescriptor(containingDeclaration, annotations, name, SourceElement.NO_SOURCE, visibility) {
     override lateinit var constructors: Collection<TypeAliasConstructorDescriptor> private set
 
@@ -192,6 +193,8 @@ class MergerTypeAliasDescriptor(
     override fun isActual(): Boolean = isActual
 
     override fun isExpect(): Boolean = isExpect
+
+    override fun isExternal(): Boolean = isExternal
 
     fun initialize(
             declaredTypeParameters: List<TypeParameterDescriptor>,
@@ -216,7 +219,7 @@ class MergerTypeAliasDescriptor(
         if (substitutor.isEmpty) return this
         val substituted = MergerTypeAliasDescriptor(
                 storageManager, containingDeclaration, annotations, name, visibility,
-                isExpect, isActual
+                isExpect, isActual, isExternal
         )
         substituted.initialize(
                 declaredTypeParameters,
@@ -320,7 +323,7 @@ class MergerDescriptorFactory(val builtIns: KotlinBuiltIns, val storageManager: 
         ).also {
             it.isExpect = isExpect
             it.isActual = isActual
-
+            it.isExternal = functionDescriptor.isExternal
             functionDescriptor.returnType
 
             it.initialize(
@@ -362,6 +365,34 @@ class MergerDescriptorFactory(val builtIns: KotlinBuiltIns, val storageManager: 
         )
     }
 
+    fun createEmptyClass(oldTypeAliasDescriptor: TypeAliasDescriptor,
+                         oldClassDescriptor: ClassDescriptor,
+                         containingDeclaration: DeclarationDescriptor,
+                         supertypes: Collection<KotlinType>,
+                         isExpect: Boolean = false,
+                         isActual: Boolean = false): MergedClassDescriptor {
+        assert(!(isExpect && isActual))
+
+        return MergedClassDescriptor(
+                storageManager,
+                oldTypeAliasDescriptor.name,
+                containingDeclaration,
+                oldClassDescriptor.isExternal, // TODO ??
+                oldClassDescriptor.modality,
+                oldClassDescriptor.kind,
+                false, // TODO ??
+                oldClassDescriptor.visibility,
+                isExpect,
+                isActual,
+                false, // TODO ??
+                false, // TODO ??
+                false, // TODO ??
+                supertypes
+        )
+
+
+    }
+
     fun createProperty(propertyDescriptor: PropertyDescriptor,
                        containingDeclaration: DeclarationDescriptor,
                        isExpect: Boolean = false,
@@ -380,7 +411,7 @@ class MergerDescriptorFactory(val builtIns: KotlinBuiltIns, val storageManager: 
                 isExpect,
                 isActual,
                 propertyDescriptor.isExternal,
-                propertyDescriptor.isSetterProjectedOut
+                false // TODO
         )
     }
 
@@ -389,11 +420,13 @@ class MergerDescriptorFactory(val builtIns: KotlinBuiltIns, val storageManager: 
                         isExpect: Boolean,
                         isActual: Boolean): MergerTypeAliasDescriptor {
 
-        return MergerTypeAliasDescriptor(
-                storageManager, containingDeclaration, typeAliasDescriptor.annotations,
-                typeAliasDescriptor.name, typeAliasDescriptor.visibility,
-                isExpect, isActual
-        )
+        return with(typeAliasDescriptor) {
+            MergerTypeAliasDescriptor(
+                    storageManager, containingDeclaration, annotations,
+                    name, visibility, isExpect, isActual, isExternal
+            )
+        }
+
     }
 
 //    fun fromDescriptor(oldDeclarationDescriptor: DeclarationDescriptor,

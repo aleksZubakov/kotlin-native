@@ -122,7 +122,7 @@ class KonanResolvedModuleDescriptorsFactoryImpl(
 /**
  * Package fragment which creates descriptors for forward declarations on demand.
  */
-private class ForwardDeclarationsPackageFragmentDescriptor(
+class ForwardDeclarationsPackageFragmentDescriptor(
         storageManager: StorageManager,
         module: ModuleDescriptor,
         fqName: FqName,
@@ -168,7 +168,7 @@ private class ForwardDeclarationsPackageFragmentDescriptor(
 }
 
 // FIXME(ddol): decouple and move interop-specific logic back to Kotlin/Native.
-internal object ForwardDeclarationsFqNames {
+object ForwardDeclarationsFqNames {
 
     val packageName = FqName("kotlinx.cinterop")
 

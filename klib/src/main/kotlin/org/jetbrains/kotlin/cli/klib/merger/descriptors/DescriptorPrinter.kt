@@ -1,13 +1,12 @@
-package org.jetbrains.kotlin.cli.klib.merger
+package org.jetbrains.kotlin.cli.klib.merger.descriptors
 
-import com.google.protobuf.Descriptors
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.contracts.description.ContractProviderKey
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
-import org.jetbrains.kotlin.ir.util.DescriptorsRemapper
 import org.jetbrains.kotlin.js.descriptorUtils.hasPrimaryConstructor
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.renderer.*
 import org.jetbrains.kotlin.resolve.DataClassDescriptorResolver
 import org.jetbrains.kotlin.resolve.DescriptorUtils
@@ -15,6 +14,146 @@ import org.jetbrains.kotlin.resolve.constants.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.secondaryConstructors
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isFlexible
+
+data class WhatSuppress(
+        val name: String,
+        val receiverName: String?,
+        val suppress: List<String>
+) {
+    constructor(name: String, receiverName: String?, suppress: String) : this(name, receiverName, listOf(suppress))
+}
+
+// TODO rename
+private class SuppressGenerator(
+        val classNameToMemberNames: Map<String, List<WhatSuppress>>,
+        val topLevelMembers: List<WhatSuppress>
+) {
+    private fun Collection<WhatSuppress>.findSuppress(descriptor: CallableDescriptor): List<String> =
+            this.filter { (name, receiverName, _) ->
+                if (name != descriptor.name.toString()) {
+                    return@filter false
+                }
+                val extenstionReceiverName = descriptor.extensionReceiverParameter?.type?.constructor?.declarationDescriptor?.name?.toString()
+                if (receiverName != extenstionReceiverName) {
+                    return@filter false
+                }
+
+                true
+            }.flatMap { it.suppress }.distinct()
+
+    fun generateSuppress(descriptor: DeclarationDescriptor): List<String> {
+        val containingDeclaration = descriptor.containingDeclaration
+        if (containingDeclaration is ClassDescriptor && descriptor is FunctionDescriptor) {
+            return classNameToMemberNames[containingDeclaration.name.toString()]?.findSuppress(descriptor)
+                    ?: emptyList()
+        }
+
+        if (descriptor is CallableDescriptor) {
+            return topLevelMembers.findSuppress(descriptor)
+        }
+
+        return emptyList()
+    }
+}
+
+
+private fun String.toName() = Name.identifier(this)
+private fun createSupressGenerator(): SuppressGenerator {
+    val overrideReturnType = "RETURN_TYPE_MISMATCH_ON_OVERRIDE"
+    val overloadsConflict = "CONFLICTING_OVERLOADS"
+    val nothingToOverride = "NOTHING_TO_OVERRIDE"
+    val classNameToMemberNames = mutableListOf<Pair<String, WhatSuppress>>().apply {
+        add("NSCalendar" to WhatSuppress("dateWithEra", null, overloadsConflict))
+        add("NSCalendar" to WhatSuppress("getEra", null, overloadsConflict))
+        add("NSDecimalNumber" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSDistantObject" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSFileCoordinator" to WhatSuppress("itemAtURL", null, overloadsConflict))
+        add("NSFileManagerDelegateProtocol" to WhatSuppress("fileManager", null, overloadsConflict))
+        add("NSFilePresenterProtocol" to WhatSuppress("presentedSubitemAtURL", null, overloadsConflict))
+        add("NSFilePresenterProtocol" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSLogicalTest" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSNetServiceBrowserDelegateProtocol" to WhatSuppress("netServiceBrowser", null, overloadsConflict))
+        add("NSNetServiceDelegateProtocol" to WhatSuppress("netService", null, overloadsConflict))
+        add("NSNumber" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSOutputStream" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSSocketPort" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSSpellServerDelegateProtocol" to WhatSuppress("spellServer", null, overloadsConflict))
+        add("NSURL" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSURLConnectionDelegateProtocol" to WhatSuppress("connection", null, overloadsConflict))
+        add("NSURLDownloadDelegateProtocol" to WhatSuppress("download", null, overloadsConflict))
+        add("NSURLProtectionSpace" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSURLProtocolClientProtocol" to WhatSuppress("URLProtocol", null, overloadsConflict))
+        add("NSURLSessionStreamDelegateProtocol" to WhatSuppress("URLSession", null, overloadsConflict))
+        add("NSUserNotificationCenterDelegateProtocol" to WhatSuppress("userNotificationCenter", null, overloadsConflict))
+        add("NSUserNotificationCenterDelegateProtocol" to WhatSuppress("userNotificationCenter", null, overloadsConflict))
+        add("NSXMLElement" to WhatSuppress("initWithName", null, overloadsConflict))
+        add("NSXMLElement" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSXMLNodeMeta" to WhatSuppress("elementWithName", null, overloadsConflict))
+        add("NSXMLParserDelegateProtocol" to WhatSuppress("parser", null, overloadsConflict))
+
+        add("NSFileWrapper" to WhatSuppress("<init>", null, overloadsConflict))
+        add("NSAppleEventDescriptor" to WhatSuppress("<init>", null, overloadsConflict))
+
+
+
+
+        add("NSArray" to WhatSuppress("init", null, overrideReturnType))
+        add("NSArray" to WhatSuppress("initWithCoder", null, overrideReturnType))
+        add("NSArrayMeta" to WhatSuppress("alloc", null, overrideReturnType))
+        add("NSArrayMeta" to WhatSuppress("allocWithZone", null, overrideReturnType))
+        add("NSArrayMeta" to WhatSuppress("new", null, overrideReturnType))
+        add("NSDictionary" to WhatSuppress("init", null, overrideReturnType))
+        add("NSDictionary" to WhatSuppress("initWithCoder", null, overrideReturnType))
+        add("NSDictionaryMeta" to WhatSuppress("alloc", null, overrideReturnType))
+        add("NSDictionaryMeta" to WhatSuppress("allocWithZone", null, overrideReturnType))
+        add("NSDictionaryMeta" to WhatSuppress("new", null, overrideReturnType))
+        add("NSMutableDictionary" to WhatSuppress("init", null, overrideReturnType))
+        add("NSMutableDictionary" to WhatSuppress("initWithCoder", null, overrideReturnType))
+        add("NSMutableDictionary" to WhatSuppress("initWithObjects", null, overrideReturnType))
+        add("NSMutableDictionaryMeta" to WhatSuppress("alloc", null, overrideReturnType))
+        add("NSMutableDictionaryMeta" to WhatSuppress("allocWithZone", null, overrideReturnType))
+        add("NSMutableDictionaryMeta" to WhatSuppress("new", null, overrideReturnType))
+        add("NSMutableSet" to WhatSuppress("init", null, overrideReturnType))
+        add("NSMutableSet" to WhatSuppress("initWithCoder", null, overrideReturnType))
+        add("NSMutableSet" to WhatSuppress("initWithObjects", null, overrideReturnType))
+        add("NSMutableSetMeta" to WhatSuppress("alloc", null, overrideReturnType))
+        add("NSMutableSetMeta" to WhatSuppress("allocWithZone", null, overrideReturnType))
+        add("NSMutableSetMeta" to WhatSuppress("new", null, overrideReturnType))
+        add("NSSet" to WhatSuppress("init", null, overrideReturnType))
+        add("NSSet" to WhatSuppress("initWithCoder", null, overrideReturnType))
+        add("NSSetMeta" to WhatSuppress("alloc", null, overrideReturnType))
+        add("NSSetMeta" to WhatSuppress("allocWithZone", null, overrideReturnType))
+        add("NSSetMeta" to WhatSuppress("new", null, overrideReturnType))
+        add("NSString" to WhatSuppress("init", null, overrideReturnType))
+        add("NSString" to WhatSuppress("initWithCoder", null, overrideReturnType))
+        add("NSStringMeta" to WhatSuppress("alloc", null, overrideReturnType))
+        add("NSStringMeta" to WhatSuppress("allocWithZone", null, overrideReturnType))
+        add("NSStringMeta" to WhatSuppress("new", null, overrideReturnType))
+
+
+
+        //TODO remove this when kotlin type are normally updated
+        add("NSProxy" to WhatSuppress("debugDescription", null, nothingToOverride))
+        add("NSURLSessionTask" to WhatSuppress("debugDescription", null, nothingToOverride))
+        add("NSXPCConnection" to WhatSuppress("synchronousRemoteObjectProxyWithErrorHandler", null, nothingToOverride))
+
+        add("NSProxy" to WhatSuppress("debugDescription", null, overrideReturnType))
+        add("Test" to WhatSuppress("<init>", null, overrideReturnType))
+
+    }.groupBy(Pair<String, WhatSuppress>::first) { it.second }
+
+    val topLevelFunctionsSuppress = mutableListOf<WhatSuppress>().apply {
+        add(WhatSuppress("create", "ObjCClassOf", overloadsConflict))
+        add(WhatSuppress("initWithCString", "NSString", overloadsConflict))
+        add(WhatSuppress("setObject", "NSMutableOrderedSet", overloadsConflict))
+        add(WhatSuppress("setValue", "NSObject", overloadsConflict))
+        add(WhatSuppress("stringWithCString", "NSStringMeta", overloadsConflict))
+        add(WhatSuppress("takeValue", "NSObject", overloadsConflict))
+        add(WhatSuppress("validateValue", "NSObject", overloadsConflict))
+    }
+
+    return SuppressGenerator(classNameToMemberNames, topLevelFunctionsSuppress)
+}
 
 fun printDescriptors(packageFqName: FqName, descriptors: List<DeclarationDescriptor>): String =
         buildDecompiledText(packageFqName, descriptors,
@@ -51,41 +190,6 @@ fun printDescriptors(packageFqName: FqName, descriptors: List<DeclarationDescrip
                     excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
                     secondaryConstructorsAsPrimary = false
                 })
-
-
-val wholeRenderer = DescriptorRenderer.withOptions {
-    classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
-    withDefinedIn = false
-    modifiers = DescriptorRendererModifier.ALL
-    startFromName = false
-    startFromDeclarationKeyword = false
-//    classWithPrimaryConstructor = true
-    verbose = true
-    unitReturnType = false
-    enhancedTypes = false // TODO ???
-    withoutReturnType = false
-    normalizedVisibilities = true // TODO find out
-    renderDefaultVisibility = false
-    overrideRenderingPolicy = OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE
-    textFormat = RenderingFormat.PLAIN
-    //                valueParametersHandler
-    withoutTypeParameters = false
-    receiverAfterName = false
-    renderCompanionObjectName = false
-    //                typeNormalizer
-    propertyAccessorRenderingPolicy = PropertyAccessorRenderingPolicy.PRETTY
-    alwaysRenderModifiers = true
-    renderConstructorKeyword = true
-    renderUnabbreviatedType = true
-    presentableUnresolvedTypes = true
-//                    defaultParameterValueRenderer = {
-//                    }
-    withoutSuperTypes = true
-    includePropertyConstant = false
-    annotationFilter = { false }
-    excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
-    secondaryConstructorsAsPrimary = false
-}
 
 val rendererWithoutExpectActual = DescriptorRenderer.withOptions {
     classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
@@ -163,7 +267,7 @@ val annotationRenderer = DescriptorRenderer.withOptions {
     excludedAnnotationClasses += setOf(KotlinBuiltIns.FQ_NAMES.suppress)
     classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
     withDefinedIn = false
-    modifiers = DescriptorRendererModifier.ALL
+    modifiers = DescriptorRendererModifier.ALL - DescriptorRendererModifier.MODALITY
     startFromName = false
     startFromDeclarationKeyword = false
     classWithPrimaryConstructor = true
@@ -191,15 +295,16 @@ val annotationRenderer = DescriptorRenderer.withOptions {
     includePropertyConstant = false
     annotationFilter = { true }
     secondaryConstructorsAsPrimary = false
+    renderPrimaryConstructorParametersAsProperties = true
 }
 
+private val suppressGenerator = createSupressGenerator()
 
 val DECOMPILED_COMMENT_FOR_PARAMETER = ""
 val FLEXIBLE_TYPE_COMMENT = ""
 val DECOMPILED_CONTRACT_STUB = ""
 val DECOMPILED_CODE_COMMENT = "TODO()"
 val TODO_CODE = "TODO()"
-
 
 fun buildDecompiledText(
         packageFqName: FqName,
@@ -334,7 +439,12 @@ fun buildDecompiledText(
     fun ClassDescriptor.enumEntryConstructors() = ((this as ClassDescriptor).typeConstructor.supertypes.first().constructor.declarationDescriptor as ClassDescriptor).constructors
 
     fun renderSecondaryConstructor(classDescriptor: ClassDescriptor, classConstructor: ClassConstructorDescriptor, indent: String) {
-        builder.append(indent).append(descriptorRenderer.render(classConstructor))
+        builder.append(indent)
+        val suppress = suppressGenerator.generateSuppress(classConstructor)
+        if (suppress.isNotEmpty()) {
+            builder.append("@Suppress(${suppress.joinToString { it.quoteAsKotlinLiteral() }})")
+        }
+        builder.append(descriptorRenderer.render(classConstructor))
 
         // TODO add primary constructor call?
         val superToCall = classDescriptor.typeConstructor.supertypes.find { it.constructor.declarationDescriptor is ClassDescriptor }
@@ -378,16 +488,20 @@ fun buildDecompiledText(
 
         builder.append(annotationRenderer.renderAnnotation(annotation))
         builder.append("(")
-        val arguments = annotationConstructor.valueParameters.joinToString {
-            val type = it.type
-            when {
-                KotlinBuiltIns.isString(type) -> "\"\""
-                KotlinBuiltIns.isInt(type) -> "0"
-                KotlinBuiltIns.isDouble(type) -> "0.0"
-                KotlinBuiltIns.isBoolean(type) -> "false"
-                else -> TODO("wtf")
-            }
-        }
+        val arguments = annotationConstructor.valueParameters
+                .filter { annotation.allValueArguments.containsKey(it.name) }
+                .joinToString {
+                    "${it.name} = ${annotation.allValueArguments[it.name]!!}"
+
+//            val type = it.type
+//            when {
+//                KotlinBuiltIns.isString(type) -> "\"\""
+//                KotlinBuiltIns.isInt(type) -> "0"
+//                KotlinBuiltIns.isDouble(type) -> "0.0"
+//                KotlinBuiltIns.isBoolean(type) -> "false"
+//                else -> TODO("wtf")
+//            }
+                }
         builder.append(arguments)
         builder.append(")")
     }
@@ -418,13 +532,20 @@ fun buildDecompiledText(
         builder.append(visibility.displayName).append(" ")
     }
 
-    fun renderPrimaryConstructor(descriptorRenderer: DescriptorRenderer, konstructor: ClassConstructorDescriptor?, ll: Boolean = false, isExpect: Boolean = false) {
+    fun renderPrimaryConstructor(descriptorRenderer: DescriptorRenderer, konstructor: ClassConstructorDescriptor?, isExpect: Boolean = false) {
+        // TODO rewrite
+        // add annotations logic
         if (isExpect) {
             return
         }
 
         if (konstructor != null) {
             builder.append(" ")
+            val suppress = suppressGenerator.generateSuppress(konstructor)
+            if (suppress.isNotEmpty()) {
+                builder.append("@Suppress(${suppress.joinToString { it.quoteAsKotlinLiteral() }})")
+            }
+
             for (annotation in konstructor.annotations) {
                 renderAnnotation(annotation)
             }
@@ -440,7 +561,11 @@ fun buildDecompiledText(
     }
 
     fun appendDescriptor(descriptorRenderer: DescriptorRenderer, descriptor: DeclarationDescriptor, indent: String, lastEnumEntry: Boolean? = null) {
-        val startOffset = builder.length
+        val suppress = suppressGenerator.generateSuppress(descriptor)
+        if (suppress.isNotEmpty()) {
+            builder.append("@Suppress(${suppress.joinToString { it.quoteAsKotlinLiteral() }})")
+        }
+
         if (DescriptorUtils.isEnumEntry(descriptor)) {
             for (annotation in descriptor.annotations) {
                 builder.append(descriptorRenderer.renderAnnotation(annotation))
@@ -465,21 +590,34 @@ fun buildDecompiledText(
             for (annotation in descriptor.annotations) {
                 renderAnnotation(annotation)
             }
-            val render = descriptorRenderer.render(descriptor)
+
+
+            // TODO remove
+            val properRenderer = if (DescriptorUtils.isAnnotationClass(descriptor)) {
+                annotationRenderer
+            } else {
+                descriptorRenderer
+            }
+            val render = properRenderer.render(descriptor)
             builder.append(render.replace("= ...", DECOMPILED_COMMENT_FOR_PARAMETER))
 
             if (descriptor is ClassDescriptor) {
-                if (!descriptor.isCompanionObject) {
-                    renderPrimaryConstructor(descriptorRenderer, descriptor.unsubstitutedPrimaryConstructor, descriptor.isActual, descriptor.isExpect)
+                if (!descriptor.isCompanionObject && !DescriptorUtils.isAnnotationClass(descriptor)) {
+                    renderPrimaryConstructor(properRenderer, descriptor.unsubstitutedPrimaryConstructor, descriptor.isExpect)
                 }
-                renderSupertypes(descriptor, descriptor.hasPrimaryConstructor())
+
+                if (descriptor.kind != ClassKind.ANNOTATION_CLASS) {
+                    renderSupertypes(descriptor, descriptor.hasPrimaryConstructor())
+                }
             }
         }
-        var endOffset = builder.length
-
         if (descriptor is CallableDescriptor) {
             // NOTE: assuming that only return types can be flexible
-            if (descriptor.returnType!!.isFlexible()) {
+//            if (descriptor.returnType == null) {
+//                println("I'm here")
+//            }
+
+            if (descriptor.returnType?.isFlexible() ?: false) {
                 builder.append(" ").append(FLEXIBLE_TYPE_COMMENT)
             }
         }
@@ -501,7 +639,7 @@ fun buildDecompiledText(
                     renderProperty(indent, descriptor as PropertyDescriptor)
                 }
             }
-        } else if (descriptor is ClassDescriptor && !DescriptorUtils.isEnumEntry(descriptor)) {
+        } else if (descriptor is ClassDescriptor && !DescriptorUtils.isEnumEntry(descriptor) && !DescriptorUtils.isAnnotationClass(descriptor)) {
             builder.append(" {\n")
 
             val subindent = indent + "    "
@@ -569,7 +707,6 @@ fun buildDecompiledText(
             }
 
             builder.append(indent).append("}")
-            endOffset = builder.length
         }
 
         builder.append("\n")

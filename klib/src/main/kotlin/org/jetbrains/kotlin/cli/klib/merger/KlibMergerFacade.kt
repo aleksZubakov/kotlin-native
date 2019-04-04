@@ -31,7 +31,10 @@ data class MergeResult(
 //        val firstTargetDependencies: List<>
 )
 
-class KlibMergerFacade(private val repository: File, private val hostManager: PlatformManager/*, libs: List<KonanLibrary>*/) {
+class KlibMergerFacade(private val repository: File,
+                       private val hostManager: PlatformManager,
+        /*libs: List<KonanLibrary>*/
+                       val compilerVersion: KonanVersion) {
     private val konanConfig: KonanConfig
 
     init {
@@ -50,7 +53,7 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
 
     fun merge(firstTargetLibs: List<KonanLibrary>, secondTargetLibs: List<KonanLibrary>): Diff<ModuleDescriptorImpl> {
         assert(firstTargetLibs.size == secondTargetLibs.size)
-        val descriptorLoader = DescriptorLoader(hostManager)
+        val descriptorLoader = DescriptorLoader(hostManager, compilerVersion)
 
         val firstTargetModules = descriptorLoader.loadDescriptors(repository, firstTargetLibs)
         val secondTargetModules = descriptorLoader.loadDescriptors(repository, secondTargetLibs)
@@ -105,15 +108,17 @@ class KlibMergerFacade(private val repository: File, private val hostManager: Pl
     fun mergeProperties(libs: List<KonanLibrary>): Properties = libs.map { it.manifestProperties }.first() // TODO
 }
 
-class DescriptorLoader(val hostManager: PlatformManager) {
+class DescriptorLoader(val hostManager: PlatformManager, val compilerVersion: KonanVersion) {
     companion object {
         private val currentLanguageVersion = LanguageVersion.LATEST_STABLE
         private val currentApiVersion = ApiVersion.LATEST_STABLE
+        val distribution = Distribution()
+        val versionSpec = LanguageVersionSettingsImpl(currentLanguageVersion, currentApiVersion)
     }
 
-    val distribution = Distribution()
+
     val storageManager = LockBasedStorageManager("")
-    val versionSpec = LanguageVersionSettingsImpl(currentLanguageVersion, currentApiVersion)
+
     val stdLib = loadStdlib()
 
 
@@ -135,7 +140,7 @@ class DescriptorLoader(val hostManager: PlatformManager) {
                 target,
                 distribution,
                 logger = { println(it) },
-                compatibleCompilerVersions = listOf(KonanVersion.CURRENT)
+                compatibleCompilerVersions = listOf(compilerVersion)
         ).libraryResolver()
 
         val resolveWithDependencies = libraryResolver.resolveWithDependencies(
@@ -149,5 +154,4 @@ class DescriptorLoader(val hostManager: PlatformManager) {
 
         return resolvedDependencies.resolvedDescriptors.filter { !it.isKonanStdlib() }
     }
-
 }

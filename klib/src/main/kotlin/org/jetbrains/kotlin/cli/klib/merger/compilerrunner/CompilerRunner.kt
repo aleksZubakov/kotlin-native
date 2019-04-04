@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.cli.bc.K2Native
 import org.jetbrains.kotlin.cli.common.CLICompiler
 import org.jetbrains.kotlin.cli.common.CLITool
 import org.jetbrains.kotlin.cli.common.ExitCode
-import org.jetbrains.kotlin.cli.klib.merger.descriptors.MergerK2MetadataCompiler
+import org.jetbrains.kotlin.cli.metadata.K2MetadataCompiler
 import org.jetbrains.kotlin.konan.file.File
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
@@ -58,9 +58,16 @@ private fun findStdlibCommon(): java.io.File {
 }
 
 
-fun compileNative(nativeSources: List<File>, commonSources: List<File>, output: File) =
-        K2Native().compile(nativeSources, commonSources, "-p", "library", "-nopack", "-Xdisable", "backend", "-o", output.absolutePath.toString())
+fun compileNative(nativeSources: List<File>, commonSources: List<File>, output: File, libraries: List<String> = emptyList(), repo: File? = null) =
+        if (libraries.isNotEmpty()) {
+            assert(repo != null)
+            repo as File
+            K2Native().compile(nativeSources, commonSources, "-p", "library", "-nopack",
+                    "-o", output.absolutePath, "-library", libraries.joinToString(",") { it }, "-repo", repo.absolutePath)
+        } else {
+            K2Native().compile(nativeSources, commonSources, "-p", "library", "-nopack", "-o", output.absolutePath)
+        }
 
 
 fun compileOnlyCommon(commonSources: List<File>, output: File) =
-        MergerK2MetadataCompiler().compile(commonSources, emptyList(), "-d", output.absolutePath.toString(), "-cp", findStdlibCommon().absolutePath)
+        KlibMergerK2MetadataCompiler().compile(commonSources, emptyList(), "-d", output.absolutePath.toString(), "-cp", findStdlibCommon().absolutePath)
