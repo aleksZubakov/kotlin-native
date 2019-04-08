@@ -6,12 +6,17 @@ import org.jetbrains.kotlin.backend.konan.KonanConfigKeys
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.cli.klib.DummyIntersector
 import org.jetbrains.kotlin.cli.klib.Library
 import org.jetbrains.kotlin.cli.klib.defaultRepository
 import org.jetbrains.kotlin.cli.klib.libraryInRepoOrCurrentDir
-import org.jetbrains.kotlin.cli.klib.merger.descriptors.MergerDescriptorFactory
-import org.jetbrains.kotlin.cli.klib.merger.ir.MergedIRToDescriptorsVisitor
+import org.jetbrains.kotlin.cli.klib.merger.ir.MergeVisitor
+import org.jetbrains.kotlin.cli.klib.merger.ir.Node
+import org.jetbrains.kotlin.cli.klib.merger.ir.SingleTargetDeclarationToMergeIRVisitor
+import org.jetbrains.kotlin.cli.klib.merger.ir.transformIntoSingleTargetNodes
+import org.jetbrains.kotlin.cli.klib.merger.ir.visitors.BuildClassifiersVisitor
+import org.jetbrains.kotlin.cli.klib.merger.ir.visitors.ClassifiersBuildContext
+import org.jetbrains.kotlin.cli.klib.merger.ir.visitors.DeclarationsInitializationVisitor
+import org.jetbrains.kotlin.cli.klib.merger.ir.visitors.WeirdTriple
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
 import org.jetbrains.kotlin.descriptors.konan.isKonanStdlib
@@ -57,38 +62,83 @@ class KlibMergerFacade(private val repository: File,
 
         val firstTargetModules = descriptorLoader.loadDescriptors(repository, firstTargetLibs)
         val secondTargetModules = descriptorLoader.loadDescriptors(repository, secondTargetLibs)
+        val mergerVisitor = MergeVisitor()
 
-//        val descriptorFactory = MergerDescriptorFactory(DefaultBuiltIns.Instance, LockBasedStorageManager())
-        val newDeclarationDescriptorDiffer = DeclarationDescriptorMerger(DummyIntersector())
-
-        return newDeclarationDescriptorDiffer.diff(firstTargetModules, secondTargetModules).let { (firstTarget, secondTarget, common) ->
-            val mergerIRToDeclarationDescriptorVisitor = MergedIRToDescriptorsVisitor(DefaultBuiltIns.Instance)
-
-            val firstTargetModules = firstTarget.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
-                it.forEach { mod ->
-                    mod.setDependencies(it)
+        val result = mutableListOf<Node>()
+        val passed = mutableSetOf<ModuleDescriptorImpl>()
+        for (ftModule in firstTargetModules) {
+            for (stModule in secondTargetModules) {
+                if (ftModule.name != stModule.name) {
+                    continue
                 }
-            }
-            val secondTargetModules = secondTarget.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
-                it.forEach { mod ->
-                    mod.setDependencies(it)
-                }
-            }
 
-            val commonTargetModules = common.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
-                it.forEach { mod ->
-                    mod.setDependencies(it)
-                }
+                result.add(ftModule.accept(mergerVisitor, stModule))
+                passed.add(ftModule)
+                passed.add(stModule)
             }
-
-
-//            return commonTargetModules
-            return@let Diff(
-                    firstTargetModules = firstTargetModules,
-                    secondTargetModules = secondTargetModules,
-                    commonModules = commonTargetModules
-            )
         }
+
+
+        val singleTargetVisitor = SingleTargetDeclarationToMergeIRVisitor()
+        result.addAll(firstTargetModules.filter { it !in passed }.transformIntoSingleTargetNodes(singleTargetVisitor, isFirstTarget = true))
+        result.addAll(secondTargetModules.filter { it !in passed }.transformIntoSingleTargetNodes(singleTargetVisitor, isFirstTarget = false))
+
+        val buildContext = ClassifiersBuildContext()
+        val buildClassifiersVisitor = BuildClassifiersVisitor(DefaultBuiltIns.Instance, buildContext)
+        for (moduleNode in result) {
+            moduleNode.accept(buildClassifiersVisitor, WeirdTriple(null, null, null))
+        }
+
+        val mergerIrToDeclarationDescriptorVisitor = DeclarationsInitializationVisitor(DefaultBuiltIns.Instance, buildContext)
+        val totalResult =
+                result.map {
+                    it.accept(mergerIrToDeclarationDescriptorVisitor, WeirdTriple(null, null, null))
+                            as WeirdTriple<ModuleDescriptorImpl>
+                }
+
+        return Diff(
+                firstTargetModules = totalResult.map { it.firstTargetDescriptor }.filterNotNull().also {
+                    it.forEach { mod -> mod.setDependencies(it) }
+                },
+                commonModules = totalResult.map { it.commonTargetDescriptor }.filterNotNull().also {
+                    it.forEach { mod -> mod.setDependencies(it) }
+                },
+                secondTargetModules = totalResult.map { it.secondTargetDescriptor }.filterNotNull().also {
+                    it.forEach { mod -> mod.setDependencies(it) }
+                }
+        )
+
+////        val descriptorFactory = MergerDescriptorFactory(DefaultBuiltIns.Instance, LockBasedStorageManager())
+//        val newDeclarationDescriptorDiffer = DeclarationDescriptorMerger(DummyIntersector())
+//
+//        return newDeclarationDescriptorDiffer.diff(firstTargetModules, secondTargetModules).let { (firstTarget, secondTarget, common) ->
+//            val mergerIRToDeclarationDescriptorVisitor = MergedIRToDescriptorsVisitor(DefaultBuiltIns.Instance)
+//
+//            val firstTargetModules = firstTarget.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
+//                it.forEach { mod ->
+//                    mod.setDependencies(it)
+//                }
+//            }
+//            val secondTargetModules = secondTarget.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
+//                it.forEach { mod ->
+//                    mod.setDependencies(it)
+//                }
+//            }
+//
+//            val commonTargetModules = common.map { it.accept(mergerIRToDeclarationDescriptorVisitor, null) }.also {
+//                it.forEach { mod ->
+//                    mod.setDependencies(it)
+//                }
+//            }
+//
+//
+////            return commonTargetModules
+//            return@let Diff(
+//                    firstTargetModules = firstTargetModules,
+//                    secondTargetModules = secondTargetModules,
+//                    commonModules = commonTargetModules
+//            )
+//        }
     }
 
 //    fun diff(libs: List<KonanLibrary>): List<ModuleWithTargets> {

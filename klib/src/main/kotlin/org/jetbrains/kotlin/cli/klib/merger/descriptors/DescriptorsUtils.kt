@@ -1,9 +1,8 @@
 package org.jetbrains.kotlin.cli.klib.merger.descriptors
 
-import org.jetbrains.kotlin.backend.common.atMostOne
-import org.jetbrains.kotlin.backend.konan.descriptors.enumEntries
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.cli.klib.merger.getPackagesFqNames
+import org.jetbrains.kotlin.cli.klib.merger.ir.*
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.*
@@ -272,15 +271,13 @@ fun getPackages(module: ModuleDescriptorImpl): List<PackageViewDescriptor> {
 fun PackageViewDescriptor.getDescriptors(descriptorKindFilter: DescriptorKindFilter) =
         memberScope.getDescriptorsFiltered(descriptorKindFilter)
 
-fun PackageViewDescriptor.getAllDescriptors() = memberScope.getDescriptorsFiltered { true }.filter {
-    it !is PackageViewDescriptor // TODO
-}
-
 
 // TODO rename
 class MergerDescriptorFactory(val builtIns: KotlinBuiltIns, val storageManager: StorageManager) {
-    fun createPackageFragmentDescriptor(name: FqName, module: ModuleDescriptorImpl): MergerFragmentDescriptor {
-        return MergerFragmentDescriptor(module, name)
+    fun createPackageFragmentDescriptor(
+            packageProperties: PackageDescriptorProperties,
+            containingDeclaration: ModuleDescriptor) = with(packageProperties) {
+        MergerFragmentDescriptor(containingDeclaration, fqName)
     }
 
     fun createPackageFragmentProvider(packageFragmentDescriptors: List<PackageFragmentDescriptor>) =
@@ -290,157 +287,110 @@ class MergerDescriptorFactory(val builtIns: KotlinBuiltIns, val storageManager: 
             KlibMergerMemberScope(descriptors, storageManager)
 
     // TODO pass builtins as class property
-    fun createModule(moduleName: Name): ModuleDescriptorImpl {
+    fun createModule(moduleProperties: ModuleDescriptorProperties) = with(moduleProperties) {
         val storageManager = LockBasedStorageManager("TODO")
         val origin = SyntheticModulesOrigin // TODO find out is it ok to use that origins
 
-        return ModuleDescriptorImpl(
-                moduleName,
+        ModuleDescriptorImpl(
+                name,
                 storageManager,
                 builtIns,
                 capabilities = mapOf(
                         KonanModuleOrigin.CAPABILITY to origin,
                         ImplicitIntegerCoercion.MODULE_CAPABILITY to false
-                ))
+                ),
+                stableName = stableName
+        )
     }
 
     fun createValueParameters(oldValueParameterDescriptor: ValueParameterDescriptor) {
-
         KotlinBuiltIns.isBuiltIn(oldValueParameterDescriptor)
     }
 
-    fun createFunction(functionDescriptor: CallableMemberDescriptor,
+    fun createFunction(functionProperties: FunctionDescriptorProperties,
                        containingDeclaration: DeclarationDescriptor,
                        isExpect: Boolean = false,
-                       isActual: Boolean = false): SimpleFunctionDescriptorImpl {
-        return SimpleFunctionDescriptorImpl.create(
+                       isActual: Boolean = false) = with(functionProperties) {
+        SimpleFunctionDescriptorImpl.create(
                 containingDeclaration,
-                functionDescriptor.annotations, // TODO resolve instead of moving from passed decriptor
-                functionDescriptor.name,
-                functionDescriptor.kind,
+                annotations, // TODO resolve instead of moving from passed decriptor
+                name,
+                kind,
                 SourceElement.NO_SOURCE/*,
             null // TODO find out is it ok to use null as original declaration always*/
         ).also {
             it.isExpect = isExpect
             it.isActual = isActual
-            it.isExternal = functionDescriptor.isExternal
-            functionDescriptor.returnType
+            it.isExternal = isExternal
 
-            it.initialize(
-                    functionDescriptor.extensionReceiverParameter,
-                    functionDescriptor.dispatchReceiverParameter,
-                    functionDescriptor.typeParameters,
-                    functionDescriptor.valueParameters,
-                    functionDescriptor.returnType,
-                    functionDescriptor.modality,
-                    functionDescriptor.visibility
-            )
+            it.initialize(extensionReceiverParameter, dispatchReceiverParameter, typeParameters,
+                    valueParameters, returnType, modality, visibility)
         }
     }
 
-
-    fun createClass(oldClassDescriptor: ClassDescriptor,
+    fun createClass(classDescriptorProperties: ClassDescriptorProperties,
                     containingDeclaration: DeclarationDescriptor,
-                    supertypes: Collection<KotlinType>,
-            /*containingDeclaration: DeclarationDescriptor,*/
                     isExpect: Boolean = false,
-                    isActual: Boolean = false): MergedClassDescriptor {
+                    isActual: Boolean = false) = with(classDescriptorProperties) {
         assert(!(isExpect && isActual))
-
-        return MergedClassDescriptor(storageManager,
-                oldClassDescriptor.name,
-                containingDeclaration,
-                oldClassDescriptor.isExternal,
-                oldClassDescriptor.modality,
-                oldClassDescriptor.kind,
-                oldClassDescriptor.isInline,
-                oldClassDescriptor.visibility,
-                isExpect,
-                isActual,
-                oldClassDescriptor.isData,
-                oldClassDescriptor.isCompanionObject,
-                oldClassDescriptor.isInner,
-                supertypes
-
-        )
+        MergedClassDescriptor(storageManager, name, containingDeclaration, isExternal,
+                modality, kind, isInline, visibility, isExpect, isActual,
+                isData, isCompanionObject, isInner, supertypes, annotations)
     }
 
-    fun createEmptyClass(oldTypeAliasDescriptor: TypeAliasDescriptor,
-                         oldClassDescriptor: ClassDescriptor,
+    fun createEmptyClass(commonTypeAliasProperties: CommonTypeAliasProperties,
                          containingDeclaration: DeclarationDescriptor,
-                         supertypes: Collection<KotlinType>,
                          isExpect: Boolean = false,
-                         isActual: Boolean = false): MergedClassDescriptor {
+                         isActual: Boolean = false) = with(commonTypeAliasProperties) {
         assert(!(isExpect && isActual))
-
-        return MergedClassDescriptor(
+        MergedClassDescriptor(
                 storageManager,
-                oldTypeAliasDescriptor.name,
+                name,
                 containingDeclaration,
-                oldClassDescriptor.isExternal, // TODO ??
-                oldClassDescriptor.modality,
-                oldClassDescriptor.kind,
+                isExternal,
+                modality,
+                kind,
                 false, // TODO ??
-                oldClassDescriptor.visibility,
+                visibility,
                 isExpect,
                 isActual,
                 false, // TODO ??
                 false, // TODO ??
                 false, // TODO ??
-                supertypes
+                supertypes,
+                Annotations.EMPTY
         )
-
-
     }
 
-    fun createProperty(propertyDescriptor: PropertyDescriptor,
+    fun createProperty(propertyProperties: PropertyDescriptorProperties,
                        containingDeclaration: DeclarationDescriptor,
                        isExpect: Boolean = false,
-                       isActual: Boolean = false): PropertyDescriptorImpl {
-        return PropertyDescriptorImpl.create(
+                       isActual: Boolean = false) = with(propertyProperties) {
+        PropertyDescriptorImpl.create(
                 containingDeclaration,
-                propertyDescriptor.annotations,
-                propertyDescriptor.modality,
-                propertyDescriptor.visibility,
-                propertyDescriptor.isVar,
-                propertyDescriptor.name,
-                propertyDescriptor.kind,
-                propertyDescriptor.source,
-                propertyDescriptor.isLateInit,
-                propertyDescriptor.isConst,
+                annotations,
+                modality,
+                visibility,
+                isVar,
+                name,
+                kind,
+                SourceElement.NO_SOURCE,
+                isLateInit,
+                isConst,
                 isExpect,
                 isActual,
-                propertyDescriptor.isExternal,
+                isExternal,
                 false // TODO
         )
     }
 
-    fun createTypeAlias(typeAliasDescriptor: TypeAliasDescriptor,
+    fun createTypeAlias(typeAliasProperties: TypeAliasProperties,
                         containingDeclaration: DeclarationDescriptor,
                         isExpect: Boolean,
-                        isActual: Boolean): MergerTypeAliasDescriptor {
-
-        return with(typeAliasDescriptor) {
-            MergerTypeAliasDescriptor(
-                    storageManager, containingDeclaration, annotations,
-                    name, visibility, isExpect, isActual, isExternal
-            )
-        }
-
+                        isActual: Boolean): MergerTypeAliasDescriptor = with(typeAliasProperties) {
+        MergerTypeAliasDescriptor(
+                storageManager, containingDeclaration, annotations,
+                name, visibility, isExpect, isActual, isExternal
+        )
     }
-
-//    fun fromDescriptor(oldDeclarationDescriptor: DeclarationDescriptor,
-//                       containingDeclaration: DeclarationDescriptor,
-//                       isExpect: Boolean,
-//                       isActual: Boolean): DeclarationDescriptor? {
-//        return when (oldDeclarationDescriptor) {
-//            is ClassDescriptor -> createClass(oldDeclarationDescriptor, containingDeclaration, emptySet(), isExpect, isActual)
-//            is FunctionDescriptor -> createFunction(oldDeclarationDescriptor, containingDeclaration, isExpect, isActual)
-//            is PropertyDescriptor -> createProperty(oldDeclarationDescriptor, containingDeclaration, isExpect, isActual)
-////            is TypeAliasDescriptor -> createTypeAlias(oldDeclarationDescriptor, containingDeclaration, isExpect, isActual)
-//            // TODO all other types of descriptors
-//            else -> null
-//        }
-//    }
-
 }

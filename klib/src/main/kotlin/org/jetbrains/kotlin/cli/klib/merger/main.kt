@@ -1,44 +1,47 @@
 package org.jetbrains.kotlin.cli.klib.merger
 
 import org.jetbrains.kotlin.cli.klib.libraryInRepo
+import org.jetbrains.kotlin.cli.klib.merger.compilerrunner.compileNative
 import org.jetbrains.kotlin.cli.klib.merger.compilerrunner.compileOnlyCommon
+import org.jetbrains.kotlin.cli.klib.merger.descriptors.printDescriptors
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
+import org.jetbrains.kotlin.konan.KonanVersion
 import org.jetbrains.kotlin.konan.file.File
 import org.jetbrains.kotlin.konan.library.impl.KonanLibraryImpl
 import org.jetbrains.kotlin.konan.target.Distribution
 import org.jetbrains.kotlin.konan.target.PlatformManager
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
-import java.nio.file.Paths
 
 fun File.resolve(path: String): File {
     // TODO make pr to kotlin native shared
     return File(java.io.File(this.path).resolve(path).absolutePath)
 }
 
-fun mergeLib(repository: File, platformsPaths: List<String>, whatToMerge: List<String>): Diff<ModuleDescriptorImpl> {
+fun mergeLib(repository: File, compilerVersion: KonanVersion, platformsPaths: List<String>, whatToMerge: List<String>): Diff<ModuleDescriptorImpl> {
     val distribution = Distribution()
     val platformManager = PlatformManager(distribution)
     val libs = mutableListOf<List<KonanLibraryImpl>>()
 
     for (platform in platformsPaths) {
         val librariesNames = whatToMerge.map {
-            distribution.klib + platform /*+ it*/
+            distribution.klib + platform + it
         }
 
 //        val librariesNames = platformsPaths.map { distribution.klib + it + whatToMerge }
-        val libsExist = librariesNames.map(::File).all { it.exists }
-        assert(libsExist) { "Cannot find libraries with given names in repo for $platform" }
+//        val libsExist = librariesNames.map(::File).all { it.exists }
+//        assert(libsExist) { "Cannot find libraries with given names in repo for $platform" }
 
-        val libraries = librariesNames.map {
-            libraryInRepo(repository, it)
-        }
+        val libraries = librariesNames
+                .map(::File)
+                .filter { it.exists }
+                .map { libraryInRepo(repository, it.absolutePath) }
 
         libs.add(libraries)
     }
 
     val (firstTarget, secondTarget) = libs
-    val klibMergerFacade = KlibMergerFacade(repository, platformManager)
+    val klibMergerFacade = KlibMergerFacade(repository, platformManager, compilerVersion)
     val linkData = klibMergerFacade.merge(firstTarget, secondTarget)
     return linkData
 }
@@ -119,58 +122,64 @@ fun printLib(prefix: String, mergeLib: ModuleDescriptorImpl, output: File): List
 fun main(args: Array<String>) {
     val whatToMerge = mutableListOf<String>().apply {
         //        add("Metal")
-//        add("CoreFoundation")
 //        add("CoreText")
-//        add("objc")
-//        add("Security")
 //        add("iconv")
 //        add("QuartzCore")
-//        add("Foundation")
 //        add("ImageIO")
 //        add("CFNetwork")
 //        add("CoreVideo")
 //        add("CoreImage")
-        add("darwin")
 //        add("IOSurface")
 //        add("CoreGraphics")
 //        add("zlib")
 //        add("Accelerate")
 //        add("CoreML")
 //        add("CoreData")
-//        add("posix")
+
+//        add("objc")
+//
 //        add("CoreServices")
-    }
+//        add("CoreFoundation")
+//        add("Security")
+//        add("Foundation")
+//        add("libkern")
+//        add("IOKit")
+//        add("osx")
+//        add("DiskArbitration")
+//        add("posix")
+//        add("darwin")
+//
+        add("")
+    }.toList()
 
     val platformsPaths = mutableListOf<String>().apply {
-        add("/platform/kot-nat1/")
-        add("/platform/kot-nat2/")
-//            "/platform/macos_x64/"
-//,
-//            "/platform/linux_x64/" //,
-//        "/platform/linux_mips3
+        add("/platform/kot-nat-1/")
+        add("/platform/kot-nat-2/")
+//        add("/platform/macos_x64/")
+//        add("/platform/ios_x64/")
+    }.toList()
 
-//            "/platform/android_arm64/"
-//            "/platform/linux_arm32_hfpStdlib"
-    }
+    val version = KonanVersion.fromString("1.1.2-release-6625")
+//    val version = KonanVersion.fromString("0.9.3-release-4223")
 
-//    val message = File("/home/aleks/Documents/work/kotlin-native/dist/klib/platform/macos_x64").listFiles.map { it.name }
-//    val message2 = File("/home/aleks/Documents/work/kotlin-native/dist/klib/platform/ios_x64").listFiles.map { it.name }
-
-
-//    for (name in message intersect message2) {
-//        println("add(\"$name\")")
-//    }
-
-    val repository = File("/home/aleks/Documents/work/kotlin-native/dist/klib")
-    val output = File("merged")
+    val repository = File("/home/aleks/Documents/work/kotlin-native/dist/klib/platform")
+    val output = File("merged-kot-nat-test2")
+//    val output = File("merged3")
     output.mkdirs()
 
-    val diff = mergeLib(repository, platformsPaths, whatToMerge)
 
+    val firstTargetKlib = output.resolve("first_target_klib")
+    firstTargetKlib.mkdirs()
+    val secondTargetKlib = output.resolve("second_target_klib")
+    secondTargetKlib.mkdirs()
+
+
+    val diff = mergeLib(repository, version, platformsPaths, whatToMerge)
+//
     val commonSources = diff.commonModules.flatMap {
         printLib("<common3>", it, output)
     }
-
+//
     val firstTargetSources = diff.firstTargetModules.flatMap {
         printLib("<firstTarget3>", it, output)
     }
@@ -178,40 +187,45 @@ fun main(args: Array<String>) {
     val secondTargetSources = diff.secondTargetModules.flatMap {
         printLib("<secondTarget3>", it, output)
     }
+//    val sources = mutableListOf<String>().apply {
+//        add("platform.CoreServices.kt")
+//        add("platform.CoreFoundation.kt")
+//        add("platform.CoreGraphics.kt")
+//        add("platform.Security.kt")
+//        add("platform.posix.kt")
+//        add("platform.Foundation.kt")
+//        add("platform.objc.kt")
+//        add("platform.darwin.kt")
+////        add("sample.kt")
+////        add("test.kt")
+////
+//    }
+//////
+//    val commonSources = /*emptyList<File>()*/sources.filter { it != "platform.CoreGraphics.kt" }.map { "<common3>$it" }.map { output.resolve(it) }
+//    val firstTargetSources = sources.map { "<firstTarget3>$it" }.map { output.resolve(it) }
+//    val secondTargetSources = sources.map { "<secondTarget3>$it" }.map { output.resolve(it) }
+
 
     output.resolve("common_output.txt").printWriter().use {
-        it.println(compileOnlyCommon(commonSources, output.resolve("coom.out")))
+        it.println(compileOnlyCommon(commonSources, output.resolve("common")))
     }
 
-//    output.resolve("3firstTarget.txt").printWriter().use {
-//        it.print(compileNative(firstTargetSources, commonSources, output))
-//    }
-//
-//    output.resolve("3secondTarget.txt").printWriter().use {
-//        it.print(compileNative(secondTargetSources, commonSources, output))
-//    }
+    val distribution = Distribution()
+    val osxDependencies = listOf(
+            "IOKit", "osx", "DiskArbitration"
+    ).map { distribution.klib + "/platform/macos_x64/" + it }.map { File(it).absolutePath }
 
+    output.resolve("first_target_output.txt").printWriter().use {
+        it.print(compileNative(firstTargetSources, commonSources, firstTargetKlib/*, osxDependencies, repository*/))
+    }
 
-    println("whoopp")
-//    val sourceFiles = printLib(mergedLibs.first(), output).distinct()
-//            mergedLibs.flatMap { printLib(mergedLibs.first(), output) }.distinct()
-//
-//    val native = listOf(
-////            "platform.Foundation.kt",
-//            "platform.darwin.kt",
-//            "platform.objc.kt",
-//            "platform.osx.kt",
-//            "platform.posix.kt"//,
-////            "platform.FOundation.kt",
-//    ).map { output.resolve(it) }
-//
-//    val common = emptyList<File>()
-//
-//    output.resolve("Log7.txt").printWriter().use {
-//        it.print(compileNative(sourceFiles, common, output.resolve("test")))
-//    }
+    output.resolve("second_target_output.txt").printWriter().use {
+        it.print(compileNative(secondTargetSources, commonSources, secondTargetKlib))
+    }
+
 
 //    generateCInteropMetadata()
+//    iosXMaco()
 }
 
 
@@ -229,3 +243,14 @@ fun generateCInteropMetadata() {
     }
 
 }
+
+fun iosXmacos() {
+    val macosLibsNames = File("/home/aleks/Documents/work/kotlin-native/dist/klib/platform/macos_x64").listFiles.map { it.name }
+    val iosLibsNames = File("/home/aleks/Documents/work/kotlin-native/dist/klib/platform/ios_x64").listFiles.map { it.name }
+
+
+    for (name in macosLibsNames intersect iosLibsNames) {
+        println("add(\"$name\")")
+    }
+}
+

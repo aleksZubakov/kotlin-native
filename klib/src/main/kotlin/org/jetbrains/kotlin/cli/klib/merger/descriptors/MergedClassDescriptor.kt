@@ -28,7 +28,8 @@ class MergedClassDescriptor(
         private val isData: Boolean = false,
         private val isCompanion: Boolean = false,
         private val isInner: Boolean = false,
-        private val supertypes: Collection<KotlinType>
+        private val supertypes: Collection<KotlinType>,
+        override val annotations: Annotations
 ) : ClassDescriptorBase(storageManager, containingDeclaration, name, SourceElement.NO_SOURCE, isExternal) {
     val typeConstructor = ClassTypeConstructorImpl(this, emptyList(), supertypes, storageManager)
 
@@ -86,10 +87,4 @@ class MergedClassDescriptor(
         // TODO("not implemented")
         return null
     }
-
-    override val annotations: Annotations
-        // TODO normal annotations field
-        get() = Annotations.EMPTY
-
-
 }
